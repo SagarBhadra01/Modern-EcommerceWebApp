@@ -1,55 +1,69 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import gsap from 'gsap';
 import { CheckCircle, Package, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 const OrderSuccess = () => {
   const orderId = `ORD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iconBgRef = useRef<HTMLDivElement>(null);
+  const iconRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline();
+      
+      tl.from(iconBgRef.current, { scale: 0, duration: 0.6, ease: 'back.out(1.5)' })
+        .from(iconRef.current, { scale: 0, opacity: 0, duration: 0.4, ease: 'back.out(2)' }, '-=0.2')
+        .from(containerRef.current, { opacity: 0, y: 30, duration: 0.5, ease: 'power2.out' }, '-=0.2');
+    });
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-20 text-center">
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-        className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-success/10 mb-8"
+    <div className="max-w-lg mx-auto px-4 py-24 text-center flex flex-col items-center">
+      <div
+        ref={iconBgRef}
+        className="inline-flex items-center justify-center p-8 rounded-full bg-success/10 mb-8 border border-success/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]"
       >
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-        >
-          <CheckCircle className="h-12 w-12 text-success" />
-        </motion.div>
-      </motion.div>
+        <div ref={iconRef}>
+          <CheckCircle className="h-16 w-16 text-success" />
+        </div>
+      </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        <h1 className="text-3xl font-bold text-white mb-3">Order Confirmed!</h1>
-        <p className="text-white/40 mb-2">Thank you for your purchase.</p>
-        <p className="text-sm text-white/40 mb-2">
-          Order number: <span className="font-mono text-white">{orderId}</span>
-        </p>
-        <p className="text-sm text-white/40 mb-8">
-          A confirmation email has been sent to your email address.
+      <div ref={containerRef} className="space-y-6">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-4 tracking-tight">Order Confirmed!</h1>
+          <p className="text-lg text-white/60 mb-2 font-light">Thank you for your purchase.</p>
+        </div>
+        
+        <div className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 shadow-xl">
+          <p className="text-sm text-white/40 mb-2">Order number</p>
+          <p className="font-mono text-xl font-bold text-white tracking-widest">{orderId}</p>
+        </div>
+        
+        <p className="text-sm text-white/50 mb-10">
+          A confirmation and receipt has been sent to your email address.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link to="/dashboard/orders">
-            <Button leftIcon={<Package className="h-4 w-4" />}>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link to="/dashboard/orders" className="w-full sm:w-auto" data-hover>
+            <Button size="lg" fullWidth leftIcon={<Package className="h-5 w-5" />} className="shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]">
               Track Order
             </Button>
           </Link>
-          <Link to="/products">
-            <Button variant="ghost" rightIcon={<ArrowRight className="h-4 w-4" />}>
+          <Link to="/products" className="w-full sm:w-auto" data-hover>
+            <Button size="lg" fullWidth variant="secondary" rightIcon={<ArrowRight className="h-5 w-5" />}>
               Continue Shopping
             </Button>
           </Link>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };

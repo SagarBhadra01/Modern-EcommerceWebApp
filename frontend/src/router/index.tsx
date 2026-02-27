@@ -1,5 +1,5 @@
 import { createBrowserRouter, Outlet, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { PageTransition } from '@/components/layout/PageTransition';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { DashboardShell } from '@/components/layout/DashboardShell';
@@ -23,25 +23,6 @@ import AdminDashboard from '@/features/admin/pages/AdminDashboard';
 import ManageProducts from '@/features/admin/pages/ManageProducts';
 import ManageOrders from '@/features/admin/pages/ManageOrders';
 import ManageUsers from '@/features/admin/pages/ManageUsers';
-
-// Animated page wrapper
-const PageTransition = ({ children }: { children: React.ReactNode }) => {
-  const location = useLocation();
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={location.pathname}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -12 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
 // Public layout with Navbar + Footer
 function PublicLayout() {
   return (

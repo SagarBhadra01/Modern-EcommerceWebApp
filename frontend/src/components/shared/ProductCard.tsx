@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useMotionValue, useSpring } from 'framer-motion';
+import gsap from 'gsap';
 import { Heart, ShoppingCart, Check, Eye } from 'lucide-react';
 import { cn, formatCurrency, calculateDiscount } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -22,37 +22,56 @@ const ProductCard = ({
 }: ProductCardProps) => {
   const [addedToCart, setAddedToCart] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
-  // 3D tilt on hover
-  const rotateX = useMotionValue(0);
-  const rotateY = useMotionValue(0);
-  const springRX = useSpring(rotateX, { stiffness: 300, damping: 30 });
-  const springRY = useSpring(rotateY, { stiffness: 300, damping: 30 });
+  // Spotlight position state
+  const [spot, setSpot] = useState({ x: 50, y: 50 }); // percentages
 
-  // Spotlight position
-  const spotX = useMotionValue(0.5);
-  const spotY = useMotionValue(0.5);
+  // GSAP quickSetters for 3D tilt
+  const xTo = useRef<any>(null);
+  const yTo = useRef<any>(null);
+
+  useEffect(() => {
+    if (!cardRef.current) return;
+    xTo.current = gsap.quickTo(cardRef.current, "rotationY", { duration: 0.5, ease: "power3" });
+    yTo.current = gsap.quickTo(cardRef.current, "rotationX", { duration: 0.5, ease: "power3" });
+  }, []);
 
   const handleMouse = useCallback(
     (e: React.MouseEvent) => {
-      if (!ref.current) return;
-      const rect = ref.current.getBoundingClientRect();
+      if (!cardRef.current || !xTo.current || !yTo.current) return;
+      const rect = cardRef.current.getBoundingClientRect();
       const cx = (e.clientX - rect.left) / rect.width;
       const cy = (e.clientY - rect.top) / rect.height;
-      rotateY.set((cx - 0.5) * 12);
-      rotateX.set(-(cy - 0.5) * 12);
-      spotX.set(cx);
-      spotY.set(cy);
+      
+      // Calculate rotation (-12 to 12 degrees)
+      xTo.current((cx - 0.5) * 16);
+      yTo.current(-(cy - 0.5) * 16);
+
+      // Spotlight coordinates based on cursor
+      setSpot({ x: cx * 100, y: cy * 100 });
     },
-    [rotateX, rotateY, spotX, spotY]
+    []
   );
 
-  const resetTilt = useCallback(() => {
-    rotateX.set(0);
-    rotateY.set(0);
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    if (imgRef.current) gsap.to(imgRef.current, { scale: 1.08, duration: 0.6, ease: 'power3.out' });
+    if (overlayRef.current) gsap.to(overlayRef.current, { opacity: 1, duration: 0.3 });
+    if (actionsRef.current) gsap.to(actionsRef.current, { y: 0, opacity: 1, duration: 0.3, ease: 'back.out(1.5)' });
+  };
+
+  const handleMouseLeave = () => {
     setIsHovered(false);
-  }, [rotateX, rotateY]);
+    if (xTo.current) xTo.current(0);
+    if (yTo.current) yTo.current(0);
+    if (imgRef.current) gsap.to(imgRef.current, { scale: 1, duration: 0.6, ease: 'power3.out' });
+    if (overlayRef.current) gsap.to(overlayRef.current, { opacity: 0, duration: 0.3 });
+    if (actionsRef.current) gsap.to(actionsRef.current, { y: 20, opacity: 0, duration: 0.3, ease: 'power3.out' });
+  };
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -65,6 +84,13 @@ const ProductCard = ({
   const handleWishlist = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    const target = e.currentTarget as HTMLElement;
+    gsap.fromTo(target, 
+      { scale: 0.8 }, 
+      { scale: 1, duration: 0.4, ease: "elastic.out(1, 0.3)" }
+    );
+    
     onWishlistToggle(product.id);
   };
 
@@ -75,165 +101,153 @@ const ProductCard = ({
     : 'info';
 
   return (
-    <Link to={`/products/${product.slug}`}>
-      <motion.div
-        ref={ref}
-        onMouseMove={handleMouse}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={resetTilt}
-        style={{
-          rotateX: springRX,
-          rotateY: springRY,
-          transformPerspective: 800,
-        }}
-        className="group relative bg-[#0A0A0A] border border-white/[0.06] rounded-xl overflow-hidden hover:border-white/[0.12] transition-all duration-500"
-      >
-        {/* Spotlight overlay on hover */}
-        {isHovered && (
-          <motion.div
-            className="absolute inset-0 z-10 pointer-events-none"
-            style={{
-              background: `radial-gradient(300px circle at ${spotX.get() * 100}% ${spotY.get() * 100}%, rgba(255,255,255,0.06), transparent 70%)`,
-            }}
-          />
-        )}
-
-        {/* Glow border */}
-        <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]" />
-
-        {/* Image */}
-        <div className="relative aspect-square overflow-hidden">
-          <motion.img
-            src={product.images[0]}
-            alt={product.title}
-            className="w-full h-full object-cover"
-            animate={{ scale: isHovered ? 1.08 : 1 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            loading="lazy"
-          />
-
-          {/* Dark overlay on hover */}
-          <motion.div
-            className="absolute inset-0 bg-black/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: isHovered ? 1 : 0 }}
-            transition={{ duration: 0.3 }}
-          />
-
-          {/* Badge */}
-          {product.badge && (
-            <motion.div
-              className="absolute top-3 left-3 z-20"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Badge variant={badgeVariant}>{product.badge}</Badge>
-            </motion.div>
-          )}
-
-          {/* Discount label */}
-          {product.originalPrice && (
-            <div className="absolute top-3 right-12 z-20">
-              <Badge variant="danger">
-                -{calculateDiscount(product.price, product.originalPrice)}%
-              </Badge>
-            </div>
-          )}
-
-          {/* Wishlist */}
-          <motion.button
-            whileHover={{ scale: 1.2 }}
-            whileTap={{ scale: 1.4 }}
-            onClick={handleWishlist}
-            className={cn(
-              'absolute top-3 right-3 z-20 p-2 rounded-full transition-all duration-300',
-              isWishlisted
-                ? 'bg-danger/20 text-danger'
-                : 'bg-black/60 backdrop-blur-sm text-white/70 hover:bg-danger/20 hover:text-danger'
-            )}
-            aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-          >
-            <Heart
-              className={cn('h-4 w-4', isWishlisted && 'fill-current')}
+    <div style={{ perspective: 1000 }} className="h-full">
+      <Link to={`/products/${product.slug}`} className="block h-full">
+        <div
+          ref={cardRef}
+          onMouseMove={handleMouse}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className="group h-full flex flex-col relative bg-[#0A0A0A] border border-white/[0.06] rounded-xl overflow-hidden hover:border-white/[0.12] transition-colors duration-500 will-change-transform"
+          style={{ transformStyle: 'preserve-3d' }}
+          data-hover
+        >
+          {/* Spotlight overlay on hover */}
+          {isHovered && (
+            <div
+              className="absolute inset-0 z-10 pointer-events-none transition-opacity duration-300"
+              style={{
+                background: `radial-gradient(300px circle at ${spot.x}% ${spot.y}%, rgba(255,255,255,0.06), transparent 70%)`
+              }}
             />
-          </motion.button>
+          )}
 
-          {/* Quick actions on hover */}
-          <motion.div
-            className="absolute bottom-0 left-0 right-0 p-3 z-20"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-          >
-            <div className="flex gap-2">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={handleAddToCart}
-                disabled={addedToCart}
-                className={cn(
-                  'flex-1 h-10 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-300 backdrop-blur-sm',
-                  addedToCart
-                    ? 'bg-success text-white'
-                    : 'bg-white hover:bg-white/90 text-black'
-                )}
-              >
-                {addedToCart ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Added!
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart className="h-4 w-4" />
-                    Add to Cart
-                  </>
-                )}
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="h-10 w-10 rounded-lg bg-white/10 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/20 transition-all"
-                aria-label="Quick view"
-              >
-                <Eye className="h-4 w-4" />
-              </motion.button>
-            </div>
-          </motion.div>
-        </div>
+          {/* Glow border inner shadow */}
+          <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]" />
 
-        {/* Info */}
-        <div className="p-4 space-y-2 relative z-10">
-          <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-white/90 transition-colors duration-300">
-            {product.title}
-          </h3>
+          {/* Image Container */}
+          <div className="relative aspect-[4/5] w-full overflow-hidden shrink-0">
+            <img
+              ref={imgRef}
+              src={product.images[0]}
+              alt={product.title}
+              className="w-full h-full object-cover will-change-transform"
+              loading="lazy"
+            />
 
-          <div className="flex items-center gap-2">
-            <RatingStars rating={product.rating} />
-            <span className="text-xs text-white/30">({product.reviewCount})</span>
-          </div>
+            {/* Dark overlay on hover */}
+            <div
+              ref={overlayRef}
+              className="absolute inset-0 bg-black/40 opacity-0 will-change-opacity"
+            />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">
-                {formatCurrency(product.price)}
-              </span>
-              {product.originalPrice && (
-                <span className="text-sm text-white/30 line-through">
-                  {formatCurrency(product.originalPrice)}
-                </span>
+            {/* Badge */}
+            {product.badge && (
+              <div className="absolute top-3 left-3 z-20">
+                <Badge variant={badgeVariant}>{product.badge}</Badge>
+              </div>
+            )}
+
+            {/* Discount label */}
+            {product.originalPrice && (
+              <div className="absolute top-3 right-12 z-20">
+                <Badge variant="danger">
+                  -{calculateDiscount(product.price, product.originalPrice)}%
+                </Badge>
+              </div>
+            )}
+
+            {/* Wishlist Button */}
+            <button
+              onClick={handleWishlist}
+              className={cn(
+                'absolute top-3 right-3 z-20 p-2 rounded-full transition-all duration-300 transform hover:scale-110 active:scale-90',
+                isWishlisted
+                  ? 'bg-danger/20 text-danger'
+                  : 'bg-black/60 backdrop-blur-sm text-white/70 hover:bg-danger/20 hover:text-danger'
               )}
+              aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+              data-hover
+            >
+              <Heart
+                className={cn('h-4 w-4 transition-transform duration-300', isWishlisted && 'fill-current scale-110')}
+              />
+            </button>
+
+            {/* Quick actions on hover */}
+            <div
+              ref={actionsRef}
+              className="absolute bottom-0 left-0 right-0 p-3 z-20 opacity-0 translate-y-5"
+            >
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddToCart}
+                  disabled={addedToCart}
+                  data-hover
+                  className={cn(
+                    'flex-1 h-10 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-300 backdrop-blur-sm transform hover:scale-[1.03] active:scale-95',
+                    addedToCart
+                      ? 'bg-success text-white'
+                      : 'bg-white hover:bg-white/90 text-black'
+                  )}
+                >
+                  {addedToCart ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Added!
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4" />
+                      Add to Cart
+                    </>
+                  )}
+                </button>
+                <button
+                  data-hover
+                  className="h-10 w-10 rounded-lg bg-white/10 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/20 transition-all transform hover:scale-110 active:scale-95 shrink-0"
+                  aria-label="Quick view"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-            {/* Stock indicator */}
-            <div className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              product.stock > 20 ? 'bg-success' : product.stock > 0 ? 'bg-warning' : 'bg-danger'
-            )} />
+          </div>
+
+          {/* Info Container */}
+          <div className="p-4 flex flex-col justify-between flex-1 relative z-10 bg-[#0A0A0A]">
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-white/90 transition-colors duration-300">
+                {product.title}
+              </h3>
+
+              <div className="flex items-center gap-2">
+                <RatingStars rating={product.rating} />
+                <span className="text-xs text-white/30">({product.reviewCount})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mt-4">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-lg font-bold text-white leading-none">
+                  {formatCurrency(product.price)}
+                </span>
+                {product.originalPrice && (
+                  <span className="text-sm text-white/30 line-through leading-none">
+                    {formatCurrency(product.originalPrice)}
+                  </span>
+                )}
+              </div>
+              {/* Stock indicator */}
+              <div className={cn(
+                'h-1.5 w-1.5 rounded-full shrink-0',
+                product.stock > 20 ? 'bg-success' : product.stock > 0 ? 'bg-warning' : 'bg-danger'
+              )} />
+            </div>
           </div>
         </div>
-      </motion.div>
-    </Link>
+      </Link>
+    </div>
   );
 };
 

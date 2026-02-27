@@ -1,7 +1,8 @@
-import { type ReactNode, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,16 +14,48 @@ interface ModalProps {
 }
 
 const Modal = ({ isOpen, onClose, title, children, size = 'md', className }: ModalProps) => {
+  const [shouldRender, setShouldRender] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Manage mount state based on isOpen to allow exit animations
   useEffect(() => {
     if (isOpen) {
+      setShouldRender(true);
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+    }
+  }, [isOpen]);
+
+  // Entrance and Exit animations
+  useEffect(() => {
+    if (shouldRender) {
+      if (isOpen) {
+        // Animate IN
+        if (overlayRef.current) gsap.fromTo(overlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+        if (contentRef.current) {
+          gsap.fromTo(contentRef.current,
+            { opacity: 0, scale: 0.95, y: 10 },
+            { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: 'power3.out' }
+          );
+        }
+      } else {
+        // Animate OUT
+        document.body.style.overflow = 'unset';
+        const tl = gsap.timeline({
+          onComplete: () => setShouldRender(false)
+        });
+        if (contentRef.current) {
+          tl.to(contentRef.current, { opacity: 0, scale: 0.95, y: 10, duration: 0.2, ease: 'power3.in' }, 0);
+        }
+        if (overlayRef.current) {
+          tl.to(overlayRef.current, { opacity: 0, duration: 0.2 }, 0);
+        }
+      }
     }
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, shouldRender]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -41,55 +74,48 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md', className }: Mod
     xl: 'max-w-xl',
   };
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+  if (!shouldRender) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        ref={overlayRef}
+        className="absolute inset-0 bg-black/80 backdrop-blur-md opacity-0"
+        onClick={onClose}
+      />
+      <div
+        ref={contentRef}
+        className={cn(
+          'relative w-full bg-[#0A0A0A] border border-[#1A1A1A] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.8)] opacity-0',
+          sizes[size],
+          className
+        )}
+      >
+        {title && (
+          <div className="flex items-center justify-between p-6 border-b border-[#1A1A1A]">
+            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all duration-200"
+              aria-label="Close modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+        {!title && (
+          <button
             onClick={onClose}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className={cn(
-              'relative w-full bg-[#0A0A0A] border border-[#1A1A1A] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.8)]',
-              sizes[size],
-              className
-            )}
+            className="absolute top-4 right-4 p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all duration-200 z-10"
+            aria-label="Close modal"
           >
-            {title && (
-              <div className="flex items-center justify-between p-6 border-b border-[#1A1A1A]">
-                <h2 className="text-lg font-semibold text-white">{title}</h2>
-                <button
-                  onClick={onClose}
-                  className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all duration-200"
-                  aria-label="Close modal"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            )}
-            {!title && (
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all duration-200 z-10"
-                aria-label="Close modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
-            <div className="p-6">{children}</div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+            <X className="h-5 w-5" />
+          </button>
+        )}
+        <div className="p-6">{children}</div>
+      </div>
+    </div>,
+    document.body
   );
 };
 

@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import gsap from 'gsap';
 import { DollarSign, ShoppingBag, Heart, Star, ArrowUpRight } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -22,28 +23,46 @@ const statusMap: Record<string, { variant: 'default' | 'success' | 'warning' | '
 
 const UserDashboard = () => {
   const user = useAuthStore((s) => s.user);
+  
+  const headerRef = useRef<HTMLDivElement>(null);
+  const statsRef = useRef<HTMLDivElement>(null);
+  const ordersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline();
+      
+      tl.fromTo(headerRef.current, { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' })
+        .fromTo(
+          statsRef.current ? statsRef.current.children : [],
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.5, stagger: 0.05, ease: 'power2.out' },
+          '-=0.3'
+        )
+        .fromTo(ordersRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.3');
+    });
+
+    return () => ctx.revert();
+  }, []);
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">
+      <div ref={headerRef} className="mb-8 opacity-0">
+        <h1 className="text-2xl font-bold text-white tracking-tight">
           Welcome back{user ? `, ${user.name.split(' ')[0]}` : ''}! 👋
         </h1>
-        <p className="text-sm text-white/40 mt-1">Here is what is happening with your account.</p>
+        <p className="text-sm text-white/40 mt-1 font-light">Here is what is happening with your account.</p>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div ref={statsRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((stat, i) => (
-          <motion.div
+          <div
             key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="bg-[#0A0A0A] border border-white/[0.06] rounded-xl p-5"
+            className="bg-[#050505] border border-white/[0.08] shadow-lg rounded-xl p-5 hover:border-white/[0.12] transition-colors opacity-0"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="h-10 w-10 rounded-xl bg-white/5 text-white/60 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 text-white/80 flex items-center justify-center shadow-inner">
                 <stat.icon className="h-5 w-5" />
               </div>
               <div className="flex items-center gap-1 text-xs font-medium text-success">
@@ -52,38 +71,38 @@ const UserDashboard = () => {
               </div>
             </div>
             <p className="text-2xl font-bold text-white">{stat.value}</p>
-            <p className="text-xs text-white/30 mt-1">{stat.label}</p>
-          </motion.div>
+            <p className="text-xs text-white/40 mt-1">{stat.label}</p>
+          </div>
         ))}
       </div>
 
       {/* Recent Orders */}
-      <div className="bg-[#0A0A0A] border border-white/[0.06] rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Recent Orders</h2>
-          <Link to="/dashboard/orders" className="text-sm text-white/50 hover:text-white transition-colors">
+      <div ref={ordersRef} className="bg-[#050505] border border-white/[0.08] shadow-xl rounded-xl p-6 opacity-0">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold text-white tracking-tight">Recent Orders</h2>
+          <Link to="/dashboard/orders" className="text-sm font-medium text-white/50 hover:text-white transition-colors" data-hover>
             View All
           </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
-                <th className="text-left py-3 px-2 text-xs font-medium text-white/30">Order ID</th>
-                <th className="text-left py-3 px-2 text-xs font-medium text-white/30">Date</th>
-                <th className="text-left py-3 px-2 text-xs font-medium text-white/30">Items</th>
-                <th className="text-left py-3 px-2 text-xs font-medium text-white/30">Total</th>
-                <th className="text-left py-3 px-2 text-xs font-medium text-white/30">Status</th>
+              <tr className="border-b border-white/[0.08]">
+                <th className="text-left font-semibold py-3 px-2 text-xs text-white/40 uppercase tracking-wider">Order ID</th>
+                <th className="text-left font-semibold py-3 px-2 text-xs text-white/40 uppercase tracking-wider">Date</th>
+                <th className="text-left font-semibold py-3 px-2 text-xs text-white/40 uppercase tracking-wider">Items</th>
+                <th className="text-left font-semibold py-3 px-2 text-xs text-white/40 uppercase tracking-wider">Total</th>
+                <th className="text-left font-semibold py-3 px-2 text-xs text-white/40 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody>
               {orders.slice(0, 5).map((order) => (
-                <tr key={order.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                  <td className="py-3 px-2 text-sm font-mono text-white">{order.id}</td>
-                  <td className="py-3 px-2 text-sm text-white/40">{formatDate(order.createdAt)}</td>
-                  <td className="py-3 px-2 text-sm text-white/40">{order.items.length} item{order.items.length > 1 ? 's' : ''}</td>
-                  <td className="py-3 px-2 text-sm font-medium text-white">{formatCurrency(order.total)}</td>
-                  <td className="py-3 px-2">
+                <tr key={order.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                  <td className="py-4 px-2 text-sm font-mono text-white/90">{order.id}</td>
+                  <td className="py-4 px-2 text-sm text-white/50">{formatDate(order.createdAt)}</td>
+                  <td className="py-4 px-2 text-sm text-white/50">{order.items.length} item{order.items.length > 1 ? 's' : ''}</td>
+                  <td className="py-4 px-2 text-sm font-bold text-white">{formatCurrency(order.total)}</td>
+                  <td className="py-4 px-2">
                     <Badge variant={statusMap[order.status]?.variant || 'default'}>
                       {statusMap[order.status]?.label || order.status}
                     </Badge>

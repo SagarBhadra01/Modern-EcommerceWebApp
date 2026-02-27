@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Link } from 'react-router-dom';
@@ -23,13 +24,21 @@ const EmptyState = ({
   onAction,
   className,
 }: EmptyStateProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    gsap.fromTo(containerRef.current,
+      { opacity: 0, y: 30 },
+      { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' }
+    );
+  }, []);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
+    <div
+      ref={containerRef}
       className={cn(
-        'flex flex-col items-center justify-center py-16 px-4 text-center',
+        'flex flex-col items-center justify-center py-16 px-4 text-center will-change-transform',
         className
       )}
     >
@@ -48,7 +57,7 @@ const EmptyState = ({
       {actionLabel && onAction && !actionLink && (
         <Button onClick={onAction}>{actionLabel}</Button>
       )}
-    </motion.div>
+    </div>
   );
 };
 

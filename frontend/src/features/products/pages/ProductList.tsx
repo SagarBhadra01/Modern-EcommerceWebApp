@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, SlidersHorizontal, Grid3X3, List, X } from 'lucide-react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { ProductCard } from '@/components/shared/ProductCard';
@@ -10,6 +11,8 @@ import { products, categories } from '@/lib/mockData';
 import { useCartStore } from '@/store/cartStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { RatingStars } from '@/components/shared/RatingStars';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const ITEMS_PER_PAGE = 9;
 
@@ -25,6 +28,11 @@ const ProductList = () => {
   const [loading, setLoading] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
   const debouncedSearch = useDebounce(search, 300);
+
+  const pageRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const mobileFiltersRef = useRef<HTMLDivElement>(null);
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -71,6 +79,49 @@ const ProductList = () => {
     currentPage * ITEMS_PER_PAGE
   );
 
+  // Page Entrance GSAP
+  useEffect(() => {
+    if (!pageRef.current) return;
+    gsap.fromTo(pageRef.current, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'power2.out' });
+    
+    if (sidebarRef.current) {
+      gsap.fromTo(sidebarRef.current, { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, delay: 0.2, ease: 'power3.out' });
+    }
+  }, []);
+
+  // Grid Stagger GSAP on list change
+  useEffect(() => {
+    if (!gridRef.current || loading) return;
+    const cards = Array.from(gridRef.current.children);
+    if (cards.length) {
+      gsap.killTweensOf(cards);
+      gsap.fromTo(cards, 
+        { opacity: 0, y: 40, rotationX: 10 }, 
+        { 
+          opacity: 1, 
+          y: 0, 
+          rotationX: 0,
+          duration: 0.6, 
+          stagger: 0.05, 
+          ease: 'back.out(1.2)' 
+        }
+      );
+    }
+  }, [paginatedProducts, viewMode, loading]);
+
+  // Mobile filters animate in/out
+  useEffect(() => {
+    if (!mobileFiltersRef.current) return;
+    if (showMobileFilters) {
+      gsap.fromTo(mobileFiltersRef.current, 
+        { height: 0, opacity: 0 }, 
+        { height: 'auto', opacity: 1, duration: 0.4, ease: 'power3.out' }
+      );
+    } else {
+      gsap.to(mobileFiltersRef.current, { height: 0, opacity: 0, duration: 0.3, ease: 'power3.in' });
+    }
+  }, [showMobileFilters]);
+
   const toggleCategory = (cat: string) => {
     setSelectedCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
@@ -95,20 +146,20 @@ const ProductList = () => {
     <div className="space-y-6">
       {/* Categories */}
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">Categories</h3>
+        <h3 className="text-sm font-semibold text-white mb-3 tracking-wide">Categories</h3>
         <div className="space-y-2">
           {categories.map((cat) => (
-            <label key={cat.id} className="flex items-center gap-2 cursor-pointer group">
+            <label key={cat.id} className="flex items-center gap-2 cursor-pointer group hover:bg-[#1A1A1A] p-2 rounded-lg transition-colors">
               <input
                 type="checkbox"
                 checked={selectedCategories.includes(cat.name)}
                 onChange={() => toggleCategory(cat.name)}
-                className="h-4 w-4 rounded border-white/20 bg-black text-white focus:ring-white/30 accent-white"
+                className="h-4 w-4 rounded border-[#333] bg-black text-white focus:ring-white/30 accent-white transition-all cursor-pointer"
               />
-              <span className="text-sm text-white/40 group-hover:text-white transition-colors flex-1">
+              <span className="text-sm text-white/60 group-hover:text-white transition-colors flex-1">
                 {cat.name}
               </span>
-              <span className="text-xs text-white/20 bg-white/5 px-1.5 py-0.5 rounded-full">
+              <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full font-medium">
                 {cat.count}
               </span>
             </label>
@@ -116,21 +167,25 @@ const ProductList = () => {
         </div>
       </div>
 
+      <div className="h-px bg-white/[0.06] w-full my-4" />
+
       {/* Rating */}
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">Minimum Rating</h3>
+        <h3 className="text-sm font-semibold text-white mb-3 tracking-wide">Minimum Rating</h3>
         <div className="space-y-2">
           {[4, 3, 2, 1].map((rating) => (
             <button
               key={rating}
               onClick={() => setMinRating(minRating === rating ? 0 : rating)}
               className={cn(
-                'flex items-center gap-2 w-full py-1 text-sm transition-colors',
-                minRating === rating ? 'text-white' : 'text-white/40 hover:text-white'
+                'flex items-center gap-2 w-full p-2 rounded-lg text-sm transition-all duration-300',
+                minRating === rating 
+                  ? 'bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]' 
+                  : 'text-white/40 hover:text-white hover:bg-[#1A1A1A]'
               )}
             >
               <RatingStars rating={rating} />
-              <span>& above</span>
+              <span className="font-medium">& above</span>
             </button>
           ))}
         </div>
@@ -139,7 +194,7 @@ const ProductList = () => {
       {(selectedCategories.length > 0 || minRating > 0) && (
         <button
           onClick={clearFilters}
-          className="text-sm text-white/50 hover:text-white transition-colors"
+          className="w-full mt-4 bg-danger/10 hover:bg-danger/20 text-danger text-sm font-medium py-2 rounded-lg transition-colors border border-danger/20"
         >
           Clear all filters
         </button>
@@ -148,16 +203,14 @@ const ProductList = () => {
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
-      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+    <div
+      ref={pageRef}
+      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 opacity-0"
     >
       <div className="flex gap-8">
         {/* Desktop Sidebar */}
-        <aside className="hidden lg:block w-[280px] shrink-0">
-          <div className="sticky top-24 bg-[#0A0A0A] border border-white/[0.06] rounded-xl p-6">
+        <aside className="hidden lg:block w-[280px] shrink-0" style={{ perspective: 1000 }}>
+          <div ref={sidebarRef} className="sticky top-24 bg-[#050505] border border-white/[0.08] rounded-2xl p-6 shadow-2xl">
             {filterSidebar}
           </div>
         </aside>
@@ -165,50 +218,50 @@ const ProductList = () => {
         {/* Main */}
         <div className="flex-1 min-w-0">
           {/* Top bar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 bg-[#050505] border border-white/[0.08] p-4 rounded-2xl shadow-xl">
             <div className="flex items-center gap-4 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+              <div className="relative flex-1 sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                 <input
                   type="text"
-                  placeholder="Search products..."
+                  placeholder="Search globally..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="w-full h-10 pl-10 pr-3 bg-[#0A0A0A] border border-white/[0.06] rounded-xl text-white text-sm placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                  className="w-full h-10 pl-10 pr-3 bg-black border border-white/[0.1] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 transition-all shadow-inner"
                 />
               </div>
               <button
                 onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className="lg:hidden p-2.5 rounded-xl bg-[#0A0A0A] border border-white/[0.06] text-white/40 hover:text-white transition-all"
+                className="lg:hidden p-2.5 rounded-xl bg-black border border-white/[0.1] text-white/50 hover:text-white hover:bg-white/5 transition-all shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
                 aria-label="Filters"
               >
                 <SlidersHorizontal className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-white/30">
+            <div className="flex items-center justify-between w-full sm:w-auto gap-4">
+              <span className="text-sm font-medium text-white/40 bg-white/5 px-3 py-1 rounded-full">
                 {filteredProducts.length} results
               </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="h-9 px-3 bg-[#0A0A0A] border border-white/[0.06] rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="h-10 px-3 bg-black border border-white/[0.1] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 cursor-pointer shadow-inner appearance-none pr-8 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-[position:right_10px_center] bg-no-repeat"
               >
-                <option value="featured">Featured</option>
+                <option value="featured">Featured First</option>
                 <option value="price-low">Price: Low to High</option>
                 <option value="price-high">Price: High to Low</option>
                 <option value="rating">Highest Rated</option>
-                <option value="newest">Newest</option>
+                <option value="newest">Newest Arrivals</option>
               </select>
-              <div className="hidden sm:flex items-center border border-white/[0.06] rounded-lg overflow-hidden">
+              <div className="hidden sm:flex items-center bg-black border border-white/[0.1] rounded-xl p-1 shadow-inner">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    'p-2 transition-colors',
+                    'p-1.5 rounded-lg transition-all',
                     viewMode === 'grid'
-                      ? 'bg-white text-black'
-                      : 'text-white/40 hover:text-white'
+                      ? 'bg-white text-black shadow-md'
+                      : 'text-white/40 hover:text-white hover:bg-white/5'
                   )}
                   aria-label="Grid view"
                 >
@@ -217,10 +270,10 @@ const ProductList = () => {
                 <button
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    'p-2 transition-colors',
+                    'p-1.5 rounded-lg transition-all',
                     viewMode === 'list'
-                      ? 'bg-white text-black'
-                      : 'text-white/40 hover:text-white'
+                      ? 'bg-white text-black shadow-md'
+                      : 'text-white/40 hover:text-white hover:bg-white/5'
                   )}
                   aria-label="List view"
                 >
@@ -230,26 +283,22 @@ const ProductList = () => {
             </div>
           </div>
 
-          {/* Mobile filters */}
-          <AnimatePresence>
-            {showMobileFilters && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-                className="lg:hidden bg-[#0A0A0A] border border-white/[0.06] rounded-xl p-6 mb-6"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-white">Filters</h3>
-                  <button onClick={() => setShowMobileFilters(false)}>
-                    <X className="h-4 w-4 text-white/40" />
-                  </button>
-                </div>
-                {filterSidebar}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Mobile filters (controlled by GSAP) */}
+          <div
+            ref={mobileFiltersRef}
+            className="lg:hidden overflow-hidden h-0 opacity-0 bg-[#050505] border-x border-b border-t-0 border-white/[0.08] rounded-b-2xl p-0 -mt-8 mb-8 shadow-xl relative z-10"
+            style={{ display: showMobileFilters ? 'block' : 'none' }}
+          >
+            <div className="p-6 pt-10">
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/[0.06]">
+                <h3 className="font-bold text-white tracking-wide">Filters</h3>
+                <button onClick={() => setShowMobileFilters(false)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                  <X className="h-4 w-4 text-white" />
+                </button>
+              </div>
+              {filterSidebar}
+            </div>
+          </div>
 
           {/* Product Grid */}
           {loading ? (
@@ -260,45 +309,36 @@ const ProductList = () => {
             </div>
           ) : (
             <>
-              <motion.div
-                layout
+              <div
+                ref={gridRef}
                 className={cn(
-                  'gap-6',
                   viewMode === 'grid'
-                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                    : 'space-y-4'
+                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'
+                    : 'flex flex-col gap-6'
                 )}
+                style={{ perspective: 1200 }}
               >
-                <AnimatePresence mode="popLayout">
-                  {paginatedProducts.map((product, i) => (
-                    <motion.div
-                      key={product.id}
-                      layout
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.3, delay: i * 0.03 }}
-                    >
-                      <ProductCard
-                        product={product}
-                        isWishlisted={wishlist.includes(product.id)}
-                        onAddToCart={(id) => {
-                          const p = products.find((p) => p.id === id);
-                          if (p) addItem(p);
-                        }}
-                        onWishlistToggle={handleWishlistToggle}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
+                {paginatedProducts.map((product) => (
+                  <div key={product.id} className="will-change-transform">
+                    <ProductCard
+                      product={product}
+                      isWishlisted={wishlist.includes(product.id)}
+                      onAddToCart={(id) => {
+                        const p = products.find((p) => p.id === id);
+                        if (p) addItem(p);
+                      }}
+                      onWishlistToggle={handleWishlistToggle}
+                    />
+                  </div>
+                ))}
+              </div>
 
               {paginatedProducts.length === 0 && (
-                <div className="text-center py-16">
-                  <p className="text-lg font-semibold text-white mb-2">No products found</p>
-                  <p className="text-sm text-white/40 mb-4">Try adjusting your filters or search terms</p>
-                  <Button variant="secondary" onClick={clearFilters}>
-                    Clear Filters
+                <div className="text-center py-20 bg-[#050505] border border-white/[0.08] rounded-2xl mt-8">
+                  <p className="text-lg font-bold text-white mb-2 tracking-wide">No products found</p>
+                  <p className="text-sm text-white/40 mb-6 max-w-sm mx-auto">Try adjusting your filters or search terms to find what you're looking for.</p>
+                  <Button onClick={clearFilters} variant="secondary" className="px-8">
+                    Clear All Filters
                   </Button>
                 </div>
               )}
@@ -307,13 +347,13 @@ const ProductList = () => {
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={setCurrentPage}
-                className="mt-8"
+                className="mt-12"
               />
             </>
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

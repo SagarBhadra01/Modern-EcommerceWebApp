@@ -1,12 +1,12 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   LayoutDashboard, ShoppingBag, Heart, Settings, LogOut, ChevronLeft, Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getInitials } from '@/lib/utils';
+import { PageTransition } from '@/components/layout/PageTransition';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
-import { getInitials } from '@/lib/utils';
 
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -107,19 +107,15 @@ const DashboardShell = () => {
       <main
         id="main"
         className={cn(
-          'flex-1 transition-all duration-300',
+          'flex-1 transition-all duration-300 relative',
           isSidebarOpen ? 'ml-[220px]' : 'ml-[72px]'
         )}
       >
-        <motion.div
-          key={location.pathname}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="p-6 lg:p-8"
-        >
-          <Outlet />
-        </motion.div>
+        <PageTransition>
+          <div className="p-6 lg:p-8">
+            <Outlet />
+          </div>
+        </PageTransition>
       </main>
     </div>
   );
