@@ -1,22 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { SignUp } from '@clerk/clerk-react';
 import gsap from 'gsap';
-import { Mail, Lock, User } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { registerSchema, type RegisterFormData } from '@/lib/validators';
-import { useAuthStore } from '@/store/authStore';
-import { toast } from 'sonner';
 
 const Register = () => {
-  const navigate = useNavigate();
-  const login = useAuthStore((s) => s.login);
-  const [loading, setLoading] = useState(false);
-
-  const formContainerRef = useRef<HTMLDivElement>(null);
   const leftPanelRef = useRef<HTMLDivElement>(null);
+  const formContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -40,30 +29,6 @@ const Register = () => {
 
     return () => ctx.revert();
   }, []);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-  });
-
-  const onSubmit = (data: RegisterFormData) => {
-    setLoading(true);
-    setTimeout(() => {
-      login({
-        id: 'new-' + Date.now(),
-        name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
-        role: 'user',
-        joinedAt: new Date().toISOString(),
-      });
-      toast.success('Account created successfully!');
-      navigate('/dashboard');
-      setLoading(false);
-    }, 800);
-  };
 
   return (
     <div className="min-h-screen flex bg-black">
@@ -94,84 +59,14 @@ const Register = () => {
         </div>
       </div>
 
-      {/* Right form panel */}
+      {/* Right form panel — Clerk SignUp */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
-        <div
-          ref={formContainerRef}
-          className="w-full max-w-sm opacity-0"
-        >
-          <div className="mb-10 text-center lg:text-left">
-            <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">Create account</h1>
-            <p className="text-base text-white/40">
-              Already have an account?{' '}
-              <Link to="/login" className="text-white hover:text-white/80 font-medium transition-colors" data-hover>
-                Sign in
-              </Link>
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="First Name"
-                placeholder="John"
-                leftIcon={<User className="h-4 w-4" />}
-                error={errors.firstName?.message}
-                {...register('firstName')}
-              />
-              <Input
-                label="Last Name"
-                placeholder="Doe"
-                error={errors.lastName?.message}
-                {...register('lastName')}
-              />
-            </div>
-            <Input
-              label="Email"
-              type="email"
-              placeholder="you@example.com"
-              leftIcon={<Mail className="h-4 w-4" />}
-              error={errors.email?.message}
-              {...register('email')}
-            />
-            <Input
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              leftIcon={<Lock className="h-4 w-4" />}
-              error={errors.password?.message}
-              {...register('password')}
-            />
-            <Input
-              label="Confirm Password"
-              type="password"
-              placeholder="••••••••"
-              leftIcon={<Lock className="h-4 w-4" />}
-              error={errors.confirmPassword?.message}
-              {...register('confirmPassword')}
-            />
-
-            <label className="flex items-start gap-3 cursor-pointer group mt-6" data-hover>
-              <input
-                type="checkbox"
-                {...register('agreeTerms')}
-                className="h-4 w-4 mt-0.5 rounded border-white/20 bg-black text-white focus:ring-white/30 accent-white transition-all cursor-pointer"
-              />
-              <span className="text-sm text-white/50 leading-tight group-hover:text-white transition-colors">
-                I agree to the{' '}
-                <a href="#" className="text-white hover:text-white/80 font-medium underline underline-offset-2">Terms of Service</a>
-                {' '}and{' '}
-                <a href="#" className="text-white hover:text-white/80 font-medium underline underline-offset-2">Privacy Policy</a>
-              </span>
-            </label>
-            {errors.agreeTerms && (
-              <p className="text-xs text-danger mt-1">{errors.agreeTerms.message}</p>
-            )}
-
-            <Button type="submit" fullWidth loading={loading} size="lg" className="mt-6 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-              Create Account
-            </Button>
-          </form>
+        <div ref={formContainerRef} className="opacity-0">
+          <SignUp
+            routing="hash"
+            signInUrl="/login"
+            forceRedirectUrl="/dashboard"
+          />
         </div>
       </div>
     </div>

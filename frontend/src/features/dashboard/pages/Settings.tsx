@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { profileSchema, passwordChangeSchema, type ProfileFormData, type PasswordChangeFormData } from '@/lib/validators';
-import { useAuthStore } from '@/store/authStore';
+import { useUser } from '@clerk/clerk-react';
 import { getInitials } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const Settings = () => {
-  const user = useAuthStore((s) => s.user);
+  const { user } = useUser();
+  const displayName = user?.fullName || user?.firstName || 'User';
+  const displayEmail = user?.primaryEmailAddress?.emailAddress || '';
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [notifications, setNotifications] = useState({
     email: true,
@@ -38,8 +40,8 @@ const Settings = () => {
   const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      name: user?.name || '',
-      email: user?.email || '',
+      name: displayName,
+      email: displayEmail,
       phone: '',
     },
   });
@@ -66,8 +68,12 @@ const Settings = () => {
         <div className="bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 sm:p-8 opacity-0">
           <div className="flex items-center gap-6">
             <div className="relative group cursor-pointer" data-hover>
-              <div className="h-20 w-20 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-2xl font-bold shadow-inner group-hover:bg-white/10 transition-colors">
-                {user ? getInitials(user.name) : 'U'}
+              <div className="h-20 w-20 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-2xl font-bold shadow-inner group-hover:bg-white/10 transition-colors overflow-hidden">
+                {user?.imageUrl ? (
+                  <img src={user.imageUrl} alt={displayName} className="h-full w-full object-cover rounded-full" />
+                ) : (
+                  getInitials(displayName)
+                )}
               </div>
               <button
                 className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.4)] group-hover:scale-110 transition-transform"
@@ -77,8 +83,8 @@ const Settings = () => {
               </button>
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">{user?.name}</h2>
-              <p className="text-sm font-medium text-white/40 mt-1">{user?.email}</p>
+              <h2 className="text-xl font-bold text-white">{displayName}</h2>
+              <p className="text-sm font-medium text-white/40 mt-1">{displayEmail}</p>
             </div>
           </div>
         </div>

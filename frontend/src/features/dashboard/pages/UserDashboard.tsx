@@ -5,7 +5,7 @@ import { DollarSign, ShoppingBag, Heart, Star, ArrowUpRight } from 'lucide-react
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { orders } from '@/lib/mockData';
-import { useAuthStore } from '@/store/authStore';
+import { useUser } from '@clerk/clerk-react';
 
 const stats = [
   { label: 'Total Orders', value: '24', trend: '+12%', icon: ShoppingBag },
@@ -22,7 +22,8 @@ const statusMap: Record<string, { variant: 'default' | 'success' | 'warning' | '
 };
 
 const UserDashboard = () => {
-  const user = useAuthStore((s) => s.user);
+  const { user } = useUser();
+  const firstName = user?.firstName || 'there';
   
   const headerRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
@@ -49,7 +50,7 @@ const UserDashboard = () => {
     <div>
       <div ref={headerRef} className="mb-8 opacity-0">
         <h1 className="text-2xl font-bold text-white tracking-tight">
-          Welcome back{user ? `, ${user.name.split(' ')[0]}` : ''}! 👋
+          Welcome back, {firstName}! 👋
         </h1>
         <p className="text-sm text-white/40 mt-1 font-light">Here is what is happening with your account.</p>
       </div>

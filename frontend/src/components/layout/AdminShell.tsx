@@ -2,11 +2,10 @@ import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, ShoppingBag, Users, LogOut, ChevronLeft, Menu, BarChart3, CreditCard, TrendingUp,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/store/authStore';
-import { useUIStore } from '@/store/uiStore';
-import { getInitials } from '@/lib/utils';
+import { cn, getInitials } from '@/lib/utils';
 import { PageTransition } from '@/components/layout/PageTransition';
+import { useUIStore } from '@/store/uiStore';
+import { useUser, useClerk, RedirectToSignIn } from '@clerk/clerk-react';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
@@ -20,13 +19,19 @@ const navItems = [
 const AdminShell = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, isSignedIn } = useUser();
+  const { signOut } = useClerk();
   const { isSidebarOpen, toggleSidebar } = useUIStore();
 
+  if (!isSignedIn) {
+    return <RedirectToSignIn />;
+  }
+
   const handleLogout = () => {
-    logout();
-    navigate('/');
+    signOut(() => navigate('/'));
   };
+
+  const displayName = user?.fullName || user?.firstName || 'Admin';
 
   return (
     <div className="min-h-screen bg-black flex">
@@ -44,9 +49,9 @@ const AdminShell = () => {
               <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center shrink-0">
                 <BarChart3 className="h-4 w-4 text-black" />
               </div>
-              <div>
-                <span className="text-sm font-bold text-white block leading-tight">Admin Panel</span>
-                <span className="text-[10px] text-white/40">MartX</span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate">Admin Panel</p>
+                <p className="text-[10px] text-white/30 truncate tracking-wider uppercase">MartX</p>
               </div>
             </div>
           )}
@@ -85,14 +90,18 @@ const AdminShell = () => {
 
         {/* User + Logout */}
         <div className="p-3 border-t border-white/[0.06] space-y-2">
-          {isSidebarOpen && user && (
+          {isSidebarOpen && (
             <div className="flex items-center gap-3 px-3 py-2">
-              <div className="h-8 w-8 rounded-full bg-white/10 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                {getInitials(user.name)}
+              <div className="h-8 w-8 rounded-full bg-white/10 text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden">
+                {user?.imageUrl ? (
+                  <img src={user.imageUrl} alt={displayName} className="h-full w-full object-cover rounded-full" />
+                ) : (
+                  getInitials(displayName)
+                )}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                <p className="text-xs text-white/40 truncate">{user.role}</p>
+                <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                <p className="text-xs text-white/40 truncate">Admin</p>
               </div>
             </div>
           )}
