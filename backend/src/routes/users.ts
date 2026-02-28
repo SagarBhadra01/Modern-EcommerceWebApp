@@ -22,6 +22,12 @@ const updateProfileSchema = z.object({
   avatar: z.string().optional(),
 });
 
+const updatePreferencesSchema = z.object({
+  emailNotifications: z.boolean().optional(),
+  orderUpdates: z.boolean().optional(),
+  promotions: z.boolean().optional(),
+});
+
 const upsertAddressSchema = z.object({
   fullName: z.string().min(2),
   line1: z.string().min(5),
@@ -96,6 +102,52 @@ router.put(
       select: { id: true, name: true, email: true, phone: true, avatar: true, role: true },
     });
     res.json(user);
+  })
+);
+
+// GET /api/users/me/preferences — Get notification preferences
+router.get(
+  '/me/preferences',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUnique({ where: { clerkId: (req as any).clerkId } });
+    if (!user) {
+      res.status(404).json({ error: 'Not Found', message: 'User not found.' });
+      return;
+    }
+
+    let prefs = await prisma.notificationPreferences.findUnique({ where: { userId: user.id } });
+    
+    // Auto-create defaults if they don't exist yet
+    if (!prefs) {
+      prefs = await prisma.notificationPreferences.create({
+        data: { userId: user.id },
+      });
+    }
+
+    res.json(prefs);
+  })
+);
+
+// PATCH /api/users/me/preferences — Update notification preferences
+router.patch(
+  '/me/preferences',
+  requireAuth,
+  validate(updatePreferencesSchema),
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUnique({ where: { clerkId: (req as any).clerkId } });
+    if (!user) {
+      res.status(404).json({ error: 'Not Found', message: 'User not found.' });
+      return;
+    }
+
+    const prefs = await prisma.notificationPreferences.upsert({
+      where: { userId: user.id },
+      update: req.body,
+      create: { userId: user.id, ...req.body },
+    });
+
+    res.json(prefs);
   })
 );
 
