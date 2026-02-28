@@ -12,6 +12,7 @@ import ProductDetail from '@/features/products/pages/ProductDetail';
 import Cart from '@/features/cart/pages/Cart';
 import Checkout from '@/features/checkout/pages/Checkout';
 import OrderSuccess from '@/features/checkout/pages/OrderSuccess';
+import OrdersPage from '@/features/orders/pages/OrdersPage';
 import Login from '@/features/auth/pages/Login';
 import Register from '@/features/auth/pages/Register';
 import ForgotPassword from '@/features/auth/pages/ForgotPassword';
@@ -23,6 +24,9 @@ import AdminDashboard from '@/features/admin/pages/AdminDashboard';
 import ManageProducts from '@/features/admin/pages/ManageProducts';
 import ManageOrders from '@/features/admin/pages/ManageOrders';
 import ManageUsers from '@/features/admin/pages/ManageUsers';
+import SellProducts from '@/features/admin/pages/SellProducts';
+import Analytics from '@/features/admin/pages/Analytics';
+
 // Public layout with Navbar + Footer
 function PublicLayout() {
   return (
@@ -49,6 +53,7 @@ export const router = createBrowserRouter([
       { path: '/cart', element: <Cart /> },
       { path: '/checkout', element: <Checkout /> },
       { path: '/checkout/success', element: <OrderSuccess /> },
+      { path: '/orders', element: <OrdersPage /> },
     ],
   },
 
@@ -73,9 +78,11 @@ export const router = createBrowserRouter([
     element: <AdminShell />,
     children: [
       { path: '/admin', element: <AdminDashboard /> },
+      { path: '/admin/sell', element: <SellProducts /> },
       { path: '/admin/products', element: <ManageProducts /> },
       { path: '/admin/orders', element: <ManageOrders /> },
       { path: '/admin/users', element: <ManageUsers /> },
+      { path: '/admin/analytics', element: <Analytics /> },
     ],
   },
 ]);

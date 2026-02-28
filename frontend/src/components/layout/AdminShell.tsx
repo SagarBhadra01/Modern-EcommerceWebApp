@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Package, ShoppingBag, Users, LogOut, ChevronLeft, Menu, BarChart3,
+  LayoutDashboard, Package, ShoppingBag, Users, LogOut, ChevronLeft, Menu, BarChart3, CreditCard, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -10,9 +10,11 @@ import { PageTransition } from '@/components/layout/PageTransition';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+  { label: 'Sell', path: '/admin/sell', icon: CreditCard },
   { label: 'Products', path: '/admin/products', icon: Package },
   { label: 'Orders', path: '/admin/orders', icon: ShoppingBag },
   { label: 'Users', path: '/admin/users', icon: Users },
+  { label: 'Analytics', path: '/admin/analytics', icon: TrendingUp },
 ];
 
 const AdminShell = () => {

@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/authStore';
 const navLinks = [
   { label: 'Home', path: '/' },
   { label: 'Products', path: '/products' },
+  { label: 'Orders', path: '/orders' },
 ];
 
 const Navbar = () => {

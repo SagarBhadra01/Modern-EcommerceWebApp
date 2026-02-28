@@ -324,3 +324,58 @@ export const salesData = Array.from({ length: 30 }, (_, i) => ({
   revenue: Math.floor(Math.random() * 3000) + 800,
   orders: Math.floor(Math.random() * 50) + 10,
 }));
+
+export interface SaleRecord {
+  id: string;
+  productId: string;
+  productTitle: string;
+  productImage: string;
+  buyerName: string;
+  buyerEmail: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  paymentMethod: 'cash' | 'card' | 'upi' | 'bank_transfer';
+  date: string;
+}
+
+export const salesTransactions: SaleRecord[] = [
+  { id: 'SALE-001', productId: '1', productTitle: 'Wireless Noise-Cancelling Headphones', productImage: products[0].images[0], buyerName: 'Sarah Mitchell', buyerEmail: 'sarah@example.com', quantity: 1, unitPrice: 249.99, totalAmount: 249.99, paymentMethod: 'card', date: '2026-02-20' },
+  { id: 'SALE-002', productId: '4', productTitle: 'Premium Cotton Hoodie', productImage: products[3].images[0], buyerName: 'Sarah Mitchell', buyerEmail: 'sarah@example.com', quantity: 2, unitPrice: 79.99, totalAmount: 159.98, paymentMethod: 'card', date: '2026-02-20' },
+  { id: 'SALE-003', productId: '5', productTitle: 'Mechanical Gaming Keyboard', productImage: products[4].images[0], buyerName: 'Mike Chen', buyerEmail: 'mike@example.com', quantity: 1, unitPrice: 159.99, totalAmount: 159.99, paymentMethod: 'upi', date: '2026-02-22' },
+  { id: 'SALE-004', productId: '3', productTitle: 'Smart Fitness Watch Pro', productImage: products[2].images[0], buyerName: 'Emma Wilson', buyerEmail: 'emma@example.com', quantity: 1, unitPrice: 299.99, totalAmount: 299.99, paymentMethod: 'card', date: '2026-02-25' },
+  { id: 'SALE-005', productId: '9', productTitle: 'Wireless Charging Pad Duo', productImage: products[8].images[0], buyerName: 'Emma Wilson', buyerEmail: 'emma@example.com', quantity: 1, unitPrice: 49.99, totalAmount: 49.99, paymentMethod: 'card', date: '2026-02-25' },
+  { id: 'SALE-006', productId: '7', productTitle: 'Ultralight Running Shoes', productImage: products[6].images[0], buyerName: 'David Park', buyerEmail: 'david@example.com', quantity: 1, unitPrice: 139.99, totalAmount: 139.99, paymentMethod: 'bank_transfer', date: '2026-02-26' },
+  { id: 'SALE-007', productId: '2', productTitle: 'Minimalist Leather Backpack', productImage: products[1].images[0], buyerName: 'James Taylor', buyerEmail: 'james@example.com', quantity: 1, unitPrice: 189.00, totalAmount: 189.00, paymentMethod: 'card', date: '2026-02-18' },
+  { id: 'SALE-008', productId: '6', productTitle: 'Ceramic Pour-Over Coffee Set', productImage: products[5].images[0], buyerName: 'James Taylor', buyerEmail: 'james@example.com', quantity: 1, unitPrice: 64.99, totalAmount: 64.99, paymentMethod: 'cash', date: '2026-02-18' },
+  { id: 'SALE-009', productId: '1', productTitle: 'Wireless Noise-Cancelling Headphones', productImage: products[0].images[0], buyerName: 'Rachel Green', buyerEmail: 'rachel@example.com', quantity: 2, unitPrice: 249.99, totalAmount: 499.98, paymentMethod: 'card', date: '2026-02-27' },
+  { id: 'SALE-010', productId: '11', productTitle: 'Premium Yoga Mat', productImage: products[10].images[0], buyerName: 'Lisa Anderson', buyerEmail: 'lisa@example.com', quantity: 1, unitPrice: 89.99, totalAmount: 89.99, paymentMethod: 'upi', date: '2026-02-15' },
+  { id: 'SALE-011', productId: '10', productTitle: 'Bamboo Desk Organizer', productImage: products[9].images[0], buyerName: 'Mike Chen', buyerEmail: 'mike@example.com', quantity: 3, unitPrice: 44.99, totalAmount: 134.97, paymentMethod: 'cash', date: '2026-02-23' },
+  { id: 'SALE-012', productId: '8', productTitle: 'Design Thinking Essentials', productImage: products[7].images[0], buyerName: 'Emma Wilson', buyerEmail: 'emma@example.com', quantity: 1, unitPrice: 34.99, totalAmount: 34.99, paymentMethod: 'card', date: '2026-02-26' },
+];
+
+export const revenueByMonth = [
+  { month: 'Sep', revenue: 18400 },
+  { month: 'Oct', revenue: 22800 },
+  { month: 'Nov', revenue: 31200 },
+  { month: 'Dec', revenue: 42500 },
+  { month: 'Jan', revenue: 38900 },
+  { month: 'Feb', revenue: 48250 },
+];
+
+export const topSellingProducts = [
+  { productId: '1', title: 'Wireless Noise-Cancelling Headphones', image: products[0].images[0], unitsSold: 124, revenue: 30998.76 },
+  { productId: '3', title: 'Smart Fitness Watch Pro', image: products[2].images[0], unitsSold: 98, revenue: 29399.02 },
+  { productId: '5', title: 'Mechanical Gaming Keyboard', image: products[4].images[0], unitsSold: 87, revenue: 13919.13 },
+  { productId: '7', title: 'Ultralight Running Shoes', image: products[6].images[0], unitsSold: 76, revenue: 10639.24 },
+  { productId: '4', title: 'Premium Cotton Hoodie', image: products[3].images[0], unitsSold: 65, revenue: 5199.35 },
+];
+
+export const categoryRevenue = [
+  { category: 'Electronics', revenue: 74316, percentage: 48 },
+  { category: 'Clothing', revenue: 18750, percentage: 12 },
+  { category: 'Accessories', revenue: 23400, percentage: 15 },
+  { category: 'Sports', revenue: 15600, percentage: 10 },
+  { category: 'Home & Living', revenue: 12500, percentage: 8 },
+  { category: 'Books', revenue: 9800, percentage: 7 },
+];
