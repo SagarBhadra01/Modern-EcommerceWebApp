@@ -59,7 +59,7 @@ const Cart = () => {
 
   if (items.length === 0) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16">
+      <div className="max-w-7xl mx-auto px-4 pt-20 py-16">
         <EmptyState
           icon={<ShoppingBag className="h-16 w-16" />}
           title="Your cart is empty"
@@ -74,7 +74,7 @@ const Cart = () => {
   return (
     <div
       ref={pageRef}
-      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 opacity-0"
+      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12 opacity-0"
     >
       <div className="flex items-center gap-3 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Shopping Cart</h1>

@@ -1,16 +1,17 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, ShoppingBag, Heart, Settings, LogOut, ChevronLeft, Menu,
+  Store, Package, CreditCard, TrendingUp, LogOut, ChevronLeft, Menu, Settings,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useUIStore } from '@/store/uiStore';
-import { useUser, useClerk, SignedIn, RedirectToSignIn } from '@clerk/clerk-react';
+import { useUser, useClerk, RedirectToSignIn } from '@clerk/clerk-react';
 
 const navItems = [
-  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Orders', path: '/dashboard/orders', icon: ShoppingBag },
-  { label: 'Wishlist', path: '/dashboard/wishlist', icon: Heart },
+  { label: 'My Shop', path: '/dashboard', icon: Store },
+  { label: 'My Products', path: '/dashboard/my-products', icon: Package },
+  { label: 'Sell', path: '/dashboard/sell', icon: CreditCard },
+  { label: 'My Analytics', path: '/dashboard/my-analytics', icon: TrendingUp },
   { label: 'Settings', path: '/dashboard/settings', icon: Settings },
 ];
 
@@ -62,8 +63,13 @@ const DashboardShell = () => {
           </button>
         </div>
 
+        {/* Seller label */}
+        {isSidebarOpen && (
+          <p className="px-6 pt-5 pb-2 text-[10px] font-bold text-white/20 uppercase tracking-[0.15em]">Seller Panel</p>
+        )}
+
         {/* Nav */}
-        <nav className="flex-1 py-4 px-3 space-y-1">
+        <nav className="flex-1 py-2 px-3 space-y-1">
           {navItems.map((item) => {
             const isActive =
               location.pathname === item.path ||
@@ -103,6 +109,13 @@ const DashboardShell = () => {
               </div>
             </div>
           )}
+          <Link
+            to="/"
+            className="flex items-center gap-3 px-3 py-2 w-full rounded-xl text-sm font-medium text-white/40 hover:text-white hover:bg-white/5 transition-all duration-300"
+          >
+            <Package className="h-5 w-5 shrink-0" />
+            {isSidebarOpen && <span>Back to Store</span>}
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-white/40 hover:text-danger hover:bg-danger/5 transition-all duration-300"

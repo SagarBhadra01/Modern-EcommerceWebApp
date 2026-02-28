@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { ShoppingCart, User, Menu, X, Search, Heart } from 'lucide-react';
+import { ShoppingCart, Menu, X, Search, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { useCartStore } from '@/store/cartStore';
-import { useUser, useClerk, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
+import { useUser, SignedIn, SignedOut } from '@clerk/clerk-react';
 
 const navLinks = [
   { label: 'Home', path: '/' },
@@ -95,7 +95,7 @@ const Navbar = () => {
               </Link>
 
               <Link
-                to="/dashboard/wishlist"
+                to="/orders"
                 data-hover
                 className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-all duration-300 hidden sm:block transform hover:scale-105 active:scale-95"
                 aria-label="Wishlist"
@@ -121,27 +121,17 @@ const Navbar = () => {
                 <Link
                   to="/dashboard"
                   data-hover
-                  className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-all duration-300 hidden sm:block transform hover:scale-105 active:scale-95"
-                  aria-label="Dashboard"
+                  className="ml-1 h-9 w-9 rounded-full overflow-hidden border-2 border-white/10 hover:border-white/30 transition-all duration-300 transform hover:scale-110 active:scale-95 shadow-[0_0_12px_rgba(255,255,255,0.1)] hidden sm:block"
+                  aria-label="Seller Dashboard"
                 >
-                  <User className="h-5 w-5" />
+                  {user?.imageUrl ? (
+                    <img src={user.imageUrl} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full bg-white/10 flex items-center justify-center text-white text-xs font-bold">
+                      {user?.firstName?.[0] || 'U'}
+                    </div>
+                  )}
                 </Link>
-                <div className="ml-1">
-                  <UserButton
-                    afterSignOutUrl="/"
-                    appearance={{
-                      elements: {
-                        avatarBox: 'h-8 w-8',
-                        userButtonPopoverCard: 'bg-[#0A0A0A] border border-white/[0.08] shadow-2xl',
-                        userButtonPopoverActionButton: 'text-white/70 hover:bg-white/5',
-                        userButtonPopoverActionButtonText: 'text-white/70',
-                        userButtonPopoverFooter: 'border-white/[0.08]',
-                        userPreviewMainIdentifier: 'text-white',
-                        userPreviewSecondaryIdentifier: 'text-white/40',
-                      },
-                    }}
-                  />
-                </div>
               </SignedIn>
               <SignedOut>
                 <Link to="/login" data-hover className="hidden sm:block ml-2">

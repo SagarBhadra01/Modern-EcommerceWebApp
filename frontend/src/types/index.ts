@@ -13,6 +13,8 @@ export interface Product {
   stock: number;
   badge?: 'New' | 'Sale' | 'Hot';
   specs?: Record<string, string>;
+  sellerId?: string;
+  sellerName?: string;
 }
 
 export interface CartItem extends Product {
@@ -94,3 +96,37 @@ export interface StatCard {
   trendUp: boolean;
   icon: string;
 }
+
+// Seller types — per-user product & sales
+export interface SellerProduct {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  title: string;
+  slug: string;
+  description: string;
+  price: number;
+  originalPrice?: number;
+  images: string[];
+  category: string;
+  stock: number;
+  status: 'active' | 'draft' | 'sold_out';
+  createdAt: string;
+}
+
+export interface SellerSale {
+  id: string;
+  sellerId: string;
+  productId: string;
+  productTitle: string;
+  productImage: string;
+  buyerName: string;
+  buyerEmail: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  paymentMethod: 'cash' | 'card' | 'upi' | 'bank_transfer';
+  status: 'completed' | 'pending' | 'refunded';
+  date: string;
+}
+
