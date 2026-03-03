@@ -1,50 +1,53 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { DollarSign, ShoppingBag, TrendingUp, BarChart3, Package } from 'lucide-react';
+import { DollarSign, ShoppingBag, TrendingUp, BarChart3, Package, Loader2 } from 'lucide-react';
 import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
-import { useUser } from '@clerk/clerk-react';
-import { useSellerStore } from '@/store/sellerStore';
+import { useQuery } from '@tanstack/react-query';
+import { sellerService, type SellerAnalyticsResponse } from '@/lib/services/seller.service';
 
 const SellerAnalytics = () => {
-  const { user } = useUser();
-  const sellerId = user?.id || '';
-  const { getMyProducts, getMySales, getMyRevenue, getMyTopProducts, getMyRecentBuyers } = useSellerStore();
-
-  const myProducts = getMyProducts(sellerId);
-  const mySales = getMySales(sellerId);
-  const myRevenue = getMyRevenue(sellerId);
-  const topProducts = getMyTopProducts(sellerId);
-  const recentBuyers = getMyRecentBuyers(sellerId);
-
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Category breakdown
-  const categoryData = myProducts.reduce<Record<string, { count: number; revenue: number }>>((acc, p) => {
-    if (!acc[p.category]) acc[p.category] = { count: 0, revenue: 0 };
+  const { data: analytics, isLoading } = useQuery({
+    queryKey: ['seller-analytics'],
+    queryFn: sellerService.getAnalytics,
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ['seller-products'],
+    queryFn: sellerService.getProducts,
+  });
+
+  const totalRevenue = analytics?.totalRevenue || 0;
+  const totalOrders = analytics?.totalOrders || 0;
+  const topProducts = analytics?.topProducts || [];
+  const recentBuyers = analytics?.recentBuyers || [];
+  const revenueByDay = analytics?.revenueByDay || [];
+  const maxDailyRevenue = Math.max(...revenueByDay.map((d) => d.revenue), 1);
+
+  // Category breakdown from products
+  const categoryData = products.reduce<Record<string, { count: number }>>((acc, p) => {
+    if (!acc[p.category]) acc[p.category] = { count: 0 };
     acc[p.category].count += 1;
-    const productSales = mySales.filter((s) => s.productId === p.id);
-    acc[p.category].revenue += productSales.reduce((sum, s) => sum + s.totalAmount, 0);
     return acc;
   }, {});
-  const categories = Object.entries(categoryData).sort((a, b) => b[1].revenue - a[1].revenue);
-  const maxCatRevenue = Math.max(...categories.map(([, d]) => d.revenue), 1);
-
-  // Daily revenue (last 30 days)
-  const dailyRevenue: { date: string; revenue: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayRevenue = mySales.filter((s) => s.date.startsWith(dateStr)).reduce((sum, s) => sum + s.totalAmount, 0);
-    dailyRevenue.push({ date: dateStr, revenue: dayRevenue });
-  }
-  const maxDailyRevenue = Math.max(...dailyRevenue.map((d) => d.revenue), 1);
+  const categories = Object.entries(categoryData).sort((a, b) => b[1].count - a[1].count);
 
   useEffect(() => {
+    if (isLoading) return;
     if (containerRef.current) {
       gsap.fromTo(containerRef.current.children, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out' });
     }
-  }, []);
+  }, [isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 text-white/30 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef}>
@@ -56,10 +59,10 @@ const SellerAnalytics = () => {
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 opacity-0">
         {[
-          { label: 'Revenue', value: formatCurrency(myRevenue), icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
-          { label: 'Products', value: myProducts.length.toString(), icon: Package, color: 'from-blue-500/20 to-blue-500/5' },
-          { label: 'Sales', value: mySales.length.toString(), icon: ShoppingBag, color: 'from-purple-500/20 to-purple-500/5' },
-          { label: 'Avg Order', value: mySales.length > 0 ? formatCurrency(myRevenue / mySales.length) : '$0', icon: TrendingUp, color: 'from-amber-500/20 to-amber-500/5' },
+          { label: 'Revenue', value: formatCurrency(totalRevenue), icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
+          { label: 'Products', value: products.length.toString(), icon: Package, color: 'from-blue-500/20 to-blue-500/5' },
+          { label: 'Sales', value: totalOrders.toString(), icon: ShoppingBag, color: 'from-purple-500/20 to-purple-500/5' },
+          { label: 'Avg Order', value: totalOrders > 0 ? formatCurrency(totalRevenue / totalOrders) : '$0', icon: TrendingUp, color: 'from-amber-500/20 to-amber-500/5' },
         ].map((stat) => (
           <div key={stat.label} className="bg-[#050505] border border-white/[0.08] rounded-2xl p-5">
             <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${stat.color} border border-white/10 flex items-center justify-center mb-3`}>
@@ -78,7 +81,7 @@ const SellerAnalytics = () => {
           <h2 className="text-lg font-bold text-white">Revenue (30 Days)</h2>
         </div>
         <div className="flex items-end justify-between gap-[2px] h-40">
-          {dailyRevenue.map((day) => (
+          {revenueByDay.map((day) => (
             <div key={day.date} className="flex-1 flex flex-col items-center justify-end h-full group relative">
               <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-[#0A0A0A] border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white whitespace-nowrap z-10 pointer-events-none">
                 {formatDate(day.date)}: {formatCurrency(day.revenue)}
@@ -138,11 +141,11 @@ const SellerAnalytics = () => {
                 <div key={cat}>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-sm font-medium text-white">{cat}</span>
-                    <span className="text-xs text-white/40">{data.count} products • {formatCurrency(data.revenue)}</span>
+                    <span className="text-xs text-white/40">{data.count} products</span>
                   </div>
                   <div className="h-2.5 bg-white/[0.05] rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-white/40 to-white/20 rounded-full transition-all duration-700"
-                      style={{ width: `${Math.max((data.revenue / maxCatRevenue) * 100, 3)}%` }} />
+                      style={{ width: `${Math.max((data.count / Math.max(...categories.map(([, d]) => d.count), 1)) * 100, 5)}%` }} />
                   </div>
                 </div>
               ))}

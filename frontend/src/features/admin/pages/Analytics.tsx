@@ -1,92 +1,52 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { TrendingUp, DollarSign, ShoppingCart, Eye, ArrowRightLeft } from 'lucide-react';
-import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
-import { Badge } from '@/components/ui/Badge';
-import { salesTransactions, salesData, topSellingProducts, categoryRevenue, products, orders } from '@/lib/mockData';
-import { useAdminStore } from '@/store/adminStore';
-
-// Combine mock sales with store sales for analytics
-const conversionMetrics = [
-  { label: 'Page Views', value: '24,521', icon: Eye, sublabel: '100%' },
-  { label: 'Add to Cart', value: '3,842', icon: ShoppingCart, sublabel: '15.7%' },
-  { label: 'Checkout', value: '1,893', icon: ArrowRightLeft, sublabel: '7.7%' },
-  { label: 'Completed', value: '1,247', icon: DollarSign, sublabel: '5.1%' },
-];
+import { TrendingUp, DollarSign, ShoppingCart, Eye, ArrowRightLeft, Loader2 } from 'lucide-react';
+import { formatCurrency, getInitials } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { adminService } from '@/lib/services/admin.service';
 
 const Analytics = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
-  const catChartRef = useRef<HTMLDivElement>(null);
   const funnelRef = useRef<HTMLDivElement>(null);
 
-  const { sales: storeSales } = useAdminStore();
-
-  // Combine all sales (mock + store)
-  const allSales = [...salesTransactions, ...storeSales.map(s => ({
-    ...s,
-    productImage: s.productImage,
-  }))];
-
-  // Compute top buyers
-  const buyerMap = new Map<string, { name: string; email: string; totalSpent: number; orderCount: number }>();
-  allSales.forEach((sale) => {
-    const existing = buyerMap.get(sale.buyerEmail);
-    if (existing) {
-      existing.totalSpent += sale.totalAmount;
-      existing.orderCount += 1;
-    } else {
-      buyerMap.set(sale.buyerEmail, {
-        name: sale.buyerName,
-        email: sale.buyerEmail,
-        totalSpent: sale.totalAmount,
-        orderCount: 1,
-      });
-    }
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: adminService.getStats,
   });
-  const topBuyers = Array.from(buyerMap.values())
-    .sort((a, b) => b.totalSpent - a.totalSpent)
-    .slice(0, 8);
 
-  // Product performance
-  const productPerformance = topSellingProducts.map((tp) => {
-    const product = products.find((p) => p.id === tp.productId);
-    return {
-      ...tp,
-      stock: product?.stock || 0,
-      category: product?.category || '',
-    };
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ['admin-analytics'],
+    queryFn: adminService.getAnalytics,
   });
+
+  const isLoading = statsLoading || analyticsLoading;
+
+  // Conversion metrics from real stats
+  const conversionMetrics = stats ? [
+    { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: DollarSign, sublabel: '100%' },
+    { label: 'Total Orders', value: stats.totalOrders.toLocaleString(), icon: ShoppingCart, sublabel: `${stats.totalUsers > 0 ? ((stats.totalOrders / stats.totalUsers) * 100).toFixed(1) : 0}%` },
+    { label: 'Total Users', value: stats.totalUsers.toLocaleString(), icon: Eye, sublabel: 'Registered' },
+    { label: 'Total Products', value: stats.totalProducts.toLocaleString(), icon: ArrowRightLeft, sublabel: 'Listed' },
+  ] : [];
+
+  // Revenue chart from stats
+  const revenueByDay = stats?.revenueByDay || [];
+  const maxDayRevenue = Math.max(...revenueByDay.map((d) => d.revenue), 1);
+
+  // Order status breakdown from analytics
+  const ordersByStatus = analytics?.ordersByStatus || [];
+
+  // Top buyers from analytics
+  const topBuyers = analytics?.topBuyers || [];
 
   useEffect(() => {
+    if (isLoading) return;
+
     const ctx = gsap.context(() => {
       if (containerRef.current) {
         gsap.fromTo(containerRef.current.children,
           { opacity: 0, y: 30 },
           { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out' }
-        );
-      }
-
-      if (chartRef.current) {
-        const bars = chartRef.current.children;
-        const maxRevenue = Math.max(...salesData.map((d) => d.revenue));
-        gsap.fromTo(bars,
-          { height: 0 },
-          {
-            height: (i: number) => `${(salesData[i]?.revenue / maxRevenue) * 100}%`,
-            duration: 0.8,
-            stagger: 0.02,
-            ease: 'back.out(1.2)',
-            delay: 0.4,
-          }
-        );
-      }
-
-      if (catChartRef.current) {
-        gsap.fromTo(
-          catChartRef.current.querySelectorAll('.analytics-cat-bar'),
-          { width: 0 },
-          { width: (i: number) => `${categoryRevenue[i]?.percentage}%`, duration: 1, stagger: 0.1, ease: 'power3.out', delay: 0.6 }
         );
       }
 
@@ -99,7 +59,15 @@ const Analytics = () => {
     });
 
     return () => ctx.revert();
-  }, []);
+  }, [isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 text-white/30 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef}>
@@ -108,9 +76,9 @@ const Analytics = () => {
         <p className="text-sm text-white/40 mt-1 font-light">Deep insights into your store performance, sales, and customer behavior.</p>
       </div>
 
-      {/* Conversion Funnel */}
+      {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 opacity-0">
-        {conversionMetrics.map((metric, i) => (
+        {conversionMetrics.map((metric) => (
           <div key={metric.label} className="bg-[#050505] border border-white/[0.08] rounded-2xl p-5 hover:border-white/[0.15] transition-all group">
             <div className="flex items-center justify-between mb-3">
               <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 text-white/70 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -120,41 +88,38 @@ const Analytics = () => {
             </div>
             <p className="text-2xl font-bold text-white">{metric.value}</p>
             <p className="text-xs text-white/40 mt-1">{metric.label}</p>
-            {i < conversionMetrics.length - 1 && (
-              <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 text-white/10">→</div>
-            )}
           </div>
         ))}
       </div>
 
-      {/* Revenue Trend (30-day) */}
+      {/* Revenue Trend */}
       <div className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 shadow-xl mb-6 opacity-0">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight">Revenue Trend</h2>
-            <p className="text-xs text-white/30 mt-1">Daily revenue for the last 30 days</p>
+            <p className="text-xs text-white/30 mt-1">Daily revenue for the last {revenueByDay.length} days</p>
           </div>
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg">
             <TrendingUp className="h-3.5 w-3.5" />
-            <span>+18.3% vs last month</span>
+            <span>{formatCurrency(stats?.totalRevenue || 0)} total</span>
           </div>
         </div>
-        <div ref={chartRef} className="flex items-end gap-[3px] h-44">
-          {salesData.map((d, i) => (
+        <div className="flex items-end gap-[3px] h-44">
+          {revenueByDay.map((d, i) => (
             <div
               key={i}
               className="flex-1 bg-gradient-to-t from-white/[0.15] to-white/[0.03] hover:from-white/[0.25] hover:to-white/[0.08] rounded-t-lg transition-all duration-200 cursor-pointer relative group"
-              style={{ height: '0%' }}
+              style={{ height: `${(d.revenue / maxDayRevenue) * 100}%`, minHeight: '2px' }}
             >
               <div className="absolute -top-9 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-black text-[9px] font-bold px-2 py-1 rounded-lg whitespace-nowrap shadow-lg z-10">
-                {d.date}: ${d.revenue}
+                {d.date}: {formatCurrency(d.revenue)}
               </div>
             </div>
           ))}
         </div>
         <div className="flex justify-between mt-2 px-0">
-          {['1', '5', '10', '15', '20', '25', '30'].map((d) => (
-            <span key={d} className="text-[9px] font-bold text-white/20">Feb {d}</span>
+          {revenueByDay.filter((_, i) => i % Math.max(1, Math.floor(revenueByDay.length / 7)) === 0).map((d, i) => (
+            <span key={i} className="text-[9px] font-bold text-white/20">{d.date.slice(5)}</span>
           ))}
         </div>
       </div>
@@ -173,16 +138,16 @@ const Analytics = () => {
                 </tr>
               </thead>
               <tbody>
-                {topBuyers.map((buyer, i) => (
-                  <tr key={buyer.email} className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] transition-colors">
+                {topBuyers.slice(0, 8).map((buyer, i) => (
+                  <tr key={buyer.email || i} className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] transition-colors">
                     <td className="py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {getInitials(buyer.name)}
+                          {getInitials(buyer.name || 'U')}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-white">{buyer.name}</p>
-                          <p className="text-[10px] text-white/30">{buyer.email}</p>
+                          <p className="text-sm font-bold text-white">{buyer.name || 'Unknown'}</p>
+                          <p className="text-[10px] text-white/30">{buyer.email || ''}</p>
                         </div>
                       </div>
                     </td>
@@ -199,77 +164,38 @@ const Analytics = () => {
           </div>
         </div>
 
-        {/* Category Breakdown */}
+        {/* Order Status Breakdown */}
         <div className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 shadow-xl opacity-0">
-          <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Revenue by Category</h2>
-          <div ref={catChartRef} className="space-y-5">
-            {categoryRevenue.map((cat) => {
-              const colors = ['from-blue-400/50 to-blue-500/20', 'from-purple-400/50 to-purple-500/20', 'from-amber-400/50 to-amber-500/20', 'from-emerald-400/50 to-emerald-500/20', 'from-pink-400/50 to-pink-500/20', 'from-cyan-400/50 to-cyan-500/20'];
-              const colorIdx = categoryRevenue.indexOf(cat);
+          <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Orders by Status</h2>
+          <div className="space-y-5">
+            {ordersByStatus.map((item) => {
+              const total = ordersByStatus.reduce((s, x) => s + x._count.id, 0) || 1;
+              const pct = Math.round((item._count.id / total) * 100);
+              const colors: Record<string, string> = {
+                processing: 'from-amber-400/50 to-amber-500/20',
+                shipped: 'from-blue-400/50 to-blue-500/20',
+                delivered: 'from-emerald-400/50 to-emerald-500/20',
+                cancelled: 'from-red-400/50 to-red-500/20',
+              };
               return (
-                <div key={cat.category}>
+                <div key={item.status}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white/70">{cat.category}</span>
+                    <span className="text-sm font-medium text-white/70 capitalize">{item.status}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/30">{formatCurrency(cat.revenue)}</span>
-                      <span className="text-xs font-bold text-white/50">{cat.percentage}%</span>
+                      <span className="text-xs text-white/30">{item._count.id} orders</span>
+                      <span className="text-xs font-bold text-white/50">{pct}%</span>
                     </div>
                   </div>
                   <div className="h-3 bg-white/[0.04] rounded-full overflow-hidden">
                     <div
-                      className={`analytics-cat-bar h-full rounded-full bg-gradient-to-r ${colors[colorIdx % colors.length]}`}
-                      style={{ width: '0%' }}
+                      className={`h-full rounded-full bg-gradient-to-r ${colors[item.status] || 'from-white/30 to-white/10'}`}
+                      style={{ width: `${pct}%` }}
                     />
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      </div>
-
-      {/* Product Performance */}
-      <div className="bg-[#050505] border border-white/[0.08] rounded-2xl overflow-hidden shadow-xl opacity-0">
-        <div className="p-6 border-b border-white/[0.06]">
-          <h2 className="text-lg font-bold text-white tracking-tight">Product Performance</h2>
-          <p className="text-xs text-white/30 mt-1">Sales data for top-performing products</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Rank</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Product</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Category</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Units Sold</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Revenue</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productPerformance.map((product, i) => (
-                <tr key={product.productId} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group">
-                  <td className="py-4 px-5">
-                    <span className={`text-sm font-bold ${i < 3 ? 'text-amber-400' : 'text-white/30'}`}>#{i + 1}</span>
-                  </td>
-                  <td className="py-4 px-5">
-                    <div className="flex items-center gap-3">
-                      <img src={product.image} alt={product.title} className="h-10 w-10 rounded-lg object-cover border border-white/10" />
-                      <span className="text-sm font-bold text-white truncate max-w-[200px]">{product.title}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-5 text-sm text-white/50">{product.category}</td>
-                  <td className="py-4 px-5 text-sm font-bold text-white">{product.unitsSold}</td>
-                  <td className="py-4 px-5 text-sm font-bold text-emerald-400">{formatCurrency(product.revenue)}</td>
-                  <td className="py-4 px-5">
-                    <Badge variant={product.stock > 30 ? 'success' : product.stock > 10 ? 'warning' : 'danger'}>
-                      {product.stock} left
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

@@ -8,8 +8,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ProductCard } from '@/components/shared/ProductCard';
-import { products, categories, testimonials, faqs } from '@/lib/mockData';
+import { contentService } from '@/lib/services/content.service';
+import { useQuery } from '@tanstack/react-query';
+import { categoryService } from '@/lib/services/category.service';
+import { productService } from '@/lib/services/product.service';
 import { useCartStore } from '@/store/cartStore';
+import type { Product } from '@/types';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -26,11 +30,32 @@ const iconMap: Record<string, React.ReactNode> = {
 // ═══════════ LANDING PAGE ════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 const Landing = () => {
+  const { data } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  });
+  
+  const categories = data || [];
   const [openFaq, setOpenFaq] = useState<string | null>(null);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const addItem = useCartStore((s) => s.addItem);
+
+  const { data: testimonials = [] } = useQuery({
+    queryKey: ['testimonials'],
+    queryFn: contentService.getTestimonials,
+  });
+
+  const { data: faqs = [] } = useQuery({
+    queryKey: ['faqs'],
+    queryFn: contentService.getFaqs,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
-  const trendingProducts = products.slice(0, 6);
+  const { data: productData, isLoading } = useQuery({
+    queryKey: ['products', 'trending'],
+    queryFn: () => productService.getProducts({ limit: 6 }),
+  });
+  
+  const trendingProducts = productData?.products || [];
 
   const handleWishlistToggle = (id: string) =>
     setWishlist((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
@@ -346,10 +371,10 @@ const Landing = () => {
           </Link>
         </div>
         <div className="prod-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" style={{ perspective: 1200 }}>
-          {trendingProducts.map((product) => (
+          {trendingProducts.map((product: Product) => (
             <div key={product.id} className="prod-card opacity-0" data-hover>
               <ProductCard product={product} isWishlisted={wishlist.includes(product.id)}
-                onAddToCart={(id) => { const p = products.find((pr) => pr.id === id); if (p) addItem(p); }}
+                onAddToCart={(id) => { const p = trendingProducts.find((pr: Product) => pr.id === id); if (p) addItem(p); }}
                 onWishlistToggle={handleWishlistToggle} />
             </div>
           ))}

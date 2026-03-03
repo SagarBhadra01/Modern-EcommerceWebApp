@@ -2,15 +2,19 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, SlidersHorizontal, Grid3X3, List, X } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { ProductCard } from '@/components/shared/ProductCard';
 import { Pagination } from '@/components/shared/Pagination';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { products, categories } from '@/lib/mockData';
+import { categoryService } from '@/lib/services/category.service';
+import { productService } from '@/lib/services/product.service';
 import { useCartStore } from '@/store/cartStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { RatingStars } from '@/components/shared/RatingStars';
+import { wishlistService } from '@/lib/services/wishlist.service';
+import { useUser } from '@clerk/clerk-react';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -20,64 +24,39 @@ const ProductList = () => {
   const [search, setSearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
-  const [sortBy, setSortBy] = useState('featured');
+  const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [currentPage, setCurrentPage] = useState(1);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
+  const { user, isLoaded } = useUser();
+  const userId = user?.id;
   const debouncedSearch = useDebounce(search, 300);
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  });
 
   const pageRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mobileFiltersRef = useRef<HTMLDivElement>(null);
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['products', currentPage, debouncedSearch, selectedCategories, minRating, sortBy],
+    queryFn: () => productService.getProducts({
+      page: currentPage,
+      limit: ITEMS_PER_PAGE,
+      search: debouncedSearch || undefined,
+      category: selectedCategories.length === 1 ? selectedCategories[0] : undefined, // Only single category supported by API for now
+      sort: sortBy as any,
+    }),
+  });
 
-    if (debouncedSearch) {
-      result = result.filter(
-        (p) =>
-          p.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-          p.category.toLowerCase().includes(debouncedSearch.toLowerCase())
-      );
-    }
-
-    if (selectedCategories.length) {
-      result = result.filter((p) =>
-        selectedCategories.includes(p.category)
-      );
-    }
-
-    if (minRating > 0) {
-      result = result.filter((p) => p.rating >= minRating);
-    }
-
-    switch (sortBy) {
-      case 'price-low':
-        result.sort((a, b) => a.price - b.price);
-        break;
-      case 'price-high':
-        result.sort((a, b) => b.price - a.price);
-        break;
-      case 'rating':
-        result.sort((a, b) => b.rating - a.rating);
-        break;
-      case 'newest':
-        result.sort((a, b) => b.id.localeCompare(a.id));
-        break;
-    }
-
-    return result;
-  }, [debouncedSearch, selectedCategories, minRating, sortBy]);
-
-  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-  const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const paginatedProducts = data?.products || [];
+  const totalPages = data?.pagination?.pages || 0;
+  const totalItems = data?.pagination?.total || 0;
 
   // Page Entrance GSAP
   useEffect(() => {
@@ -122,9 +101,9 @@ const ProductList = () => {
     }
   }, [showMobileFilters]);
 
-  const toggleCategory = (cat: string) => {
+  const toggleCategory = (catSlug: string) => {
     setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+      prev.includes(catSlug) ? prev.filter((c) => c !== catSlug) : [...prev, catSlug]
     );
     setCurrentPage(1);
   };
@@ -136,10 +115,31 @@ const ProductList = () => {
     setCurrentPage(1);
   };
 
+  const queryClient = useQueryClient();
+
+  // Wishlist Logic
+  const { data: wishlistData } = useQuery({
+    queryKey: ['wishlist'],
+    queryFn: wishlistService.getWishlist,
+    enabled: isLoaded && !!userId,
+  });
+  const wishlist = typeof wishlistData === 'object' && wishlistData !== null 
+                     ? (wishlistData as any[]).map(item => item.product?.id || item.productId) 
+                     : [];
+
+  const toggleWishlistMutation = useMutation({
+    mutationFn: (productId: string) => {
+      const isWishlisted = wishlist.includes(productId);
+      return isWishlisted ? wishlistService.removeFromWishlist(productId) : wishlistService.addToWishlist(productId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+    },
+  });
+
   const handleWishlistToggle = (id: string) => {
-    setWishlist((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+    if (!userId) return; // Ignore if guest
+    toggleWishlistMutation.mutate(id);
   };
 
   const filterSidebar = (
@@ -152,8 +152,8 @@ const ProductList = () => {
             <label key={cat.id} className="flex items-center gap-2 cursor-pointer group hover:bg-[#1A1A1A] p-2 rounded-lg transition-colors">
               <input
                 type="checkbox"
-                checked={selectedCategories.includes(cat.name)}
-                onChange={() => toggleCategory(cat.name)}
+                checked={selectedCategories.includes(cat.slug)}
+                onChange={() => toggleCategory(cat.slug)}
                 className="h-4 w-4 rounded border-[#333] bg-black text-white focus:ring-white/30 accent-white transition-all cursor-pointer"
               />
               <span className="text-sm text-white/60 group-hover:text-white transition-colors flex-1">
@@ -241,7 +241,7 @@ const ProductList = () => {
 
             <div className="flex items-center justify-between w-full sm:w-auto gap-4">
               <span className="text-sm font-medium text-white/40 bg-white/5 px-3 py-1 rounded-full">
-                {filteredProducts.length} results
+                {totalItems} results
               </span>
               <select
                 value={sortBy}
@@ -318,13 +318,13 @@ const ProductList = () => {
                 )}
                 style={{ perspective: 1200 }}
               >
-                {paginatedProducts.map((product) => (
+                {paginatedProducts.map((product: import('@/types').Product) => (
                   <div key={product.id} className="will-change-transform">
                     <ProductCard
                       product={product}
                       isWishlisted={wishlist.includes(product.id)}
                       onAddToCart={(id) => {
-                        const p = products.find((p) => p.id === id);
+                        const p = paginatedProducts.find((p: import('@/types').Product) => p.id === id);
                         if (p) addItem(p);
                       }}
                       onWishlistToggle={handleWishlistToggle}

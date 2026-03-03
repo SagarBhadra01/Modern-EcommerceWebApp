@@ -10,15 +10,22 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { RatingStars } from '@/components/shared/RatingStars';
 import { ProductCard } from '@/components/shared/ProductCard';
-import { products, reviews } from '@/lib/mockData';
 import { useCartStore } from '@/store/cartStore';
+import { productService } from '@/lib/services/product.service';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 
 const tabs = ['Description', 'Specifications', 'Reviews'] as const;
 
 const ProductDetail = () => {
   const { slug } = useParams<{ slug: string }>();
-  const product = products.find((p) => p.slug === slug);
+  
+  const { data: product, isLoading } = useQuery({
+    queryKey: ['product', slug],
+    queryFn: () => productService.getProductBySlug(slug!),
+    enabled: !!slug,
+  });
+
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Description');
@@ -78,6 +85,14 @@ const ProductDetail = () => {
     }
   }, [activeTab]);
 
+  if (!product && isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h1 className="text-2xl font-bold text-white mb-4">Loading product...</h1>
+      </div>
+    );
+  }
+
   if (!product) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
@@ -89,10 +104,16 @@ const ProductDetail = () => {
     );
   }
 
-  const productReviews = reviews.filter((r) => r.productId === product.id);
-  const relatedProducts = products
-    .filter((p) => p.category === product.category && p.id !== product.id)
-    .slice(0, 4);
+  // Use the included reviews from the backend relation
+  const productReviews = product.reviews || [];
+
+  const { data: relatedData } = useQuery({
+    queryKey: ['products', 'related', product.category?.slug],
+    queryFn: () => productService.getProducts({ category: product.category?.slug, limit: 4 }),
+    enabled: !!product.category?.slug,
+  });
+
+  const relatedProducts = (relatedData?.products || []).filter((p: import('@/types').Product) => p.id !== product.id).slice(0, 4);
 
   const handleAddToCart = () => {
     addItem(product, quantity);
@@ -141,7 +162,7 @@ const ProductDetail = () => {
           </div>
           {product.images.length > 1 && (
             <div className="flex gap-3">
-              {product.images.map((img, i) => (
+              {product.images.map((img: string, i: number) => (
                 <button
                   key={i}
                   data-hover
@@ -305,7 +326,7 @@ const ProductDetail = () => {
               {Object.entries(product.specs).map(([key, value]) => (
                 <div key={key} className="flex justify-between py-4 border-b border-white/[0.06] hover:bg-white/[0.02] px-2 rounded transition-colors">
                   <span className="text-sm font-medium text-white/40">{key}</span>
-                  <span className="text-sm font-semibold text-white">{value}</span>
+                  <span className="text-sm font-semibold text-white">{value as React.ReactNode}</span>
                 </div>
               ))}
             </div>
@@ -322,7 +343,7 @@ const ProductDetail = () => {
                 <div className="w-px h-24 bg-white/[0.06] hidden sm:block" />
                 <div className="flex-1 space-y-3 w-full">
                   {[5, 4, 3, 2, 1].map((star, i) => {
-                    const count = productReviews.filter((r) => Math.floor(r.rating) === star).length;
+                    const count = productReviews.filter((r: import('@/types').Review) => Math.floor(r.rating) === star).length;
                     const pct = productReviews.length ? (count / productReviews.length) * 100 : 0;
                     return (
                       <div key={star} className="flex items-center gap-4 group">
@@ -345,7 +366,7 @@ const ProductDetail = () => {
               
               {/* Individual reviews */}
               <div className="space-y-4">
-                {productReviews.map((review) => (
+                {productReviews.map((review: import('@/types').Review) => (
                   <div key={review.id} className="bg-[#050505] border border-white/[0.06] rounded-2xl p-6 sm:p-8 space-y-4 transition-all hover:border-white/[0.12] hover:bg-[#0A0A0A]">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-4">
@@ -379,12 +400,12 @@ const ProductDetail = () => {
         <div className="mt-24 pt-12 border-t border-white/[0.06]">
           <h2 className="text-2xl font-bold text-white mb-8 tracking-tight">Related Products</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {relatedProducts.map((p) => (
+            {relatedProducts.map((p: import('@/types').Product) => (
               <ProductCard
                 key={p.id}
                 product={p}
                 onAddToCart={(id) => {
-                  const prod = products.find((pr) => pr.id === id);
+                  const prod = relatedProducts.find((pr: import('@/types').Product) => pr.id === id);
                   if (prod) { addItem(prod); toast.success('Added to cart'); }
                 }}
                 onWishlistToggle={() => {}}

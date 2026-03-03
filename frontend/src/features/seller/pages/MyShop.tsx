@@ -1,167 +1,185 @@
-import { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { DollarSign, Package, ShoppingBag, TrendingUp, ArrowUpRight, Crown } from 'lucide-react';
-import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
+import { Plus, Package, DollarSign, TrendingUp, BarChart3, Edit3, Trash2, Loader2 } from 'lucide-react';
+import { cn, formatCurrency } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
-import { useUser } from '@clerk/clerk-react';
-import { useSellerStore } from '@/store/sellerStore';
+import { Button } from '@/components/ui/Button';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { sellerService, type CreateSellerProductPayload } from '@/lib/services/seller.service';
+import type { SellerProduct } from '@/types';
 
 const MyShop = () => {
-  const { user } = useUser();
-  const sellerId = user?.id || '';
-  const { getMyProducts, getMySales, getMyRevenue, getMyTopProducts, getMyRecentBuyers } = useSellerStore();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const queryClient = useQueryClient();
 
-  const myProducts = getMyProducts(sellerId);
-  const mySales = getMySales(sellerId);
-  const myRevenue = getMyRevenue(sellerId);
-  const topProducts = getMyTopProducts(sellerId);
-  const recentBuyers = getMyRecentBuyers(sellerId);
-  const activeProducts = myProducts.filter((p) => p.status === 'active').length;
-
-  const statsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Fetch products and analytics from backend
+  const { data: products = [], isLoading: productsLoading } = useQuery({
+    queryKey: ['seller-products'],
+    queryFn: sellerService.getProducts,
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ['seller-analytics'],
+    queryFn: sellerService.getAnalytics,
+  });
+
+  const addProductMutation = useMutation({
+    mutationFn: (payload: CreateSellerProductPayload) => sellerService.createProduct(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-products'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-analytics'] });
+      setShowAddModal(false);
+    },
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: (id: string) => sellerService.deleteProduct(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-products'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-analytics'] });
+    },
+  });
 
   const stats = [
-    { label: 'Total Revenue', value: formatCurrency(myRevenue), trend: '+22%', icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
-    { label: 'Products Listed', value: myProducts.length.toString(), trend: `${activeProducts} active`, icon: Package, color: 'from-blue-500/20 to-blue-500/5' },
-    { label: 'Total Sales', value: mySales.length.toString(), trend: 'All time', icon: ShoppingBag, color: 'from-purple-500/20 to-purple-500/5' },
-    { label: 'Avg. Order', value: mySales.length > 0 ? formatCurrency(myRevenue / mySales.length) : '$0', trend: 'Per sale', icon: TrendingUp, color: 'from-amber-500/20 to-amber-500/5' },
+    { label: 'Total Products', value: products.length.toString(), icon: Package, color: 'from-blue-500/20 to-blue-500/5' },
+    { label: 'Total Revenue', value: formatCurrency(analytics?.totalRevenue || 0), icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
+    { label: 'Total Orders', value: (analytics?.totalOrders || 0).toString(), icon: TrendingUp, color: 'from-purple-500/20 to-purple-500/5' },
+    { label: 'Active Listings', value: products.filter((p: SellerProduct) => p.status === 'active').length.toString(), icon: BarChart3, color: 'from-amber-500/20 to-amber-500/5' },
   ];
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline();
-      if (statsRef.current) {
-        tl.fromTo(statsRef.current.children,
-          { opacity: 0, y: 30, scale: 0.95 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.6, stagger: 0.08, ease: 'power3.out' }
-        );
-      }
-      if (containerRef.current) {
-        tl.fromTo(containerRef.current.children,
-          { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, ease: 'power3.out' },
-          '-=0.3'
-        );
-      }
-    });
-    return () => ctx.revert();
+    if (containerRef.current) {
+      gsap.fromTo(containerRef.current,
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }
+      );
+    }
   }, []);
 
+  useEffect(() => {
+    const activeCards = cardsRef.current.filter(Boolean);
+    if (activeCards.length > 0) {
+      gsap.fromTo(activeCards,
+        { opacity: 0, y: 20, scale: 0.95 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.06, ease: 'power2.out', clearProps: 'all' }
+      );
+    }
+  }, [products.length]);
+
+  const handleAddProduct = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    addProductMutation.mutate({
+      title: fd.get('title') as string,
+      description: fd.get('description') as string || 'No description',
+      price: parseFloat(fd.get('price') as string),
+      images: [(fd.get('image') as string) || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400'],
+      category: fd.get('category') as string || 'General',
+      stock: parseInt(fd.get('stock') as string) || 1,
+    });
+  };
+
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white tracking-tight">My Shop</h1>
-        <p className="text-sm text-white/40 mt-1 font-light">Overview of your store, products, and sales performance.</p>
+    <div ref={containerRef} className="opacity-0">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">My Shop</h1>
+          <p className="text-sm text-white/40 mt-1">Manage your products and track sales.</p>
+        </div>
+        <Button onClick={() => setShowAddModal(true)} className="bg-white text-black hover:bg-white/90 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+          <Plus className="h-4 w-4 mr-2" /> Add Product
+        </Button>
       </div>
 
       {/* Stats */}
-      <div ref={statsRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((stat) => (
-          <div key={stat.label} className="bg-[#050505] border border-white/[0.08] shadow-lg rounded-2xl p-5 hover:border-white/[0.15] transition-all duration-300 opacity-0 group cursor-default">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${stat.color} border border-white/10 text-white/80 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}>
-                <stat.icon className="h-5 w-5" />
-              </div>
-              <div className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">
-                <ArrowUpRight className="h-3 w-3" />
-                {stat.trend}
-              </div>
+          <div key={stat.label} className="bg-[#050505] border border-white/[0.08] shadow-lg rounded-2xl p-5 hover:border-white/[0.15] transition-all group">
+            <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${stat.color} border border-white/10 text-white/80 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+              <stat.icon className="h-5 w-5" />
             </div>
-            <p className="text-3xl font-bold text-white tracking-tight">{stat.value}</p>
-            <p className="text-xs text-white/40 mt-1 font-medium">{stat.label}</p>
+            <p className="text-2xl font-bold text-white">{stat.value}</p>
+            <p className="text-xs text-white/40 mt-1">{stat.label}</p>
           </div>
         ))}
       </div>
 
-      {myProducts.length === 0 ? (
-        /* Empty state for new sellers */
-        <div className="bg-[#050505] border border-white/[0.08] rounded-2xl p-12 text-center">
-          <div className="h-20 w-20 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center mx-auto mb-6">
-            <Package className="h-8 w-8 text-white/15" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-3">Start selling today!</h2>
-          <p className="text-sm text-white/40 max-w-md mx-auto mb-6 font-light">
-            List your products, manage sales, and track your earnings — all from your personal shop dashboard.
-          </p>
-          <Link
-            to="/dashboard/my-products"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-white text-black rounded-xl text-sm font-bold hover:bg-white/90 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-          >
-            Add Your First Product
-          </Link>
+      {/* Products Grid */}
+      {productsLoading ? (
+        <div className="flex items-center justify-center py-24"><Loader2 className="h-8 w-8 text-white/30 animate-spin" /></div>
+      ) : products.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center bg-[#050505] border border-white/[0.08] rounded-2xl">
+          <Package className="h-8 w-8 text-white/15 mb-4" />
+          <p className="text-base text-white/60 font-medium">No products yet</p>
+          <p className="text-sm text-white/30 mt-1 mb-6">Add your first product to get started.</p>
+          <Button onClick={() => setShowAddModal(true)} className="bg-white text-black"><Plus className="h-4 w-4 mr-2" /> Add Product</Button>
         </div>
       ) : (
-        <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Top Products */}
-          <div className="lg:col-span-7 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white tracking-tight">Top Products</h2>
-              <Crown className="h-4 w-4 text-amber-400" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {products.map((product: SellerProduct, i: number) => (
+            <div key={product.id} ref={(el) => { cardsRef.current[i] = el; }}
+              className="bg-[#050505] border border-white/[0.08] rounded-2xl overflow-hidden hover:border-white/[0.15] transition-all group">
+              <div className="h-40 bg-white/[0.02] relative overflow-hidden">
+                {product.images[0] && (
+                  <img src={product.images[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                )}
+                <Badge variant={product.status === 'active' ? 'success' : 'warning'} className="absolute top-3 right-3">
+                  {product.status}
+                </Badge>
+              </div>
+              <div className="p-4">
+                <h3 className="text-sm font-bold text-white mb-1 truncate">{product.title}</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-lg font-bold text-white">{formatCurrency(product.price)}</span>
+                  <span className="text-xs text-white/30">{product.stock} in stock</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" className="flex-1 bg-white/5 border-white/10 hover:bg-white/10">
+                    <Edit3 className="h-3 w-3 mr-1" /> Edit
+                  </Button>
+                  <Button size="sm" variant="danger"
+                    onClick={() => deleteProductMutation.mutate(product.id)}
+                    className="bg-danger/10 text-danger border-danger/20 hover:bg-danger/20">
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
             </div>
-            {topProducts.length > 0 ? (
-              <div className="space-y-1">
-                {topProducts.map((product, i) => (
-                  <div key={product.productId} className="flex items-center gap-4 py-3 px-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-default group">
-                    <span className="text-xs font-bold text-white/20 w-5 text-center">#{i + 1}</span>
-                    <img src={product.image} alt={product.title} className="h-10 w-10 rounded-lg object-cover border border-white/10 group-hover:scale-105 transition-transform" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{product.title}</p>
-                      <p className="text-xs text-white/30 mt-0.5">{product.unitsSold} units sold</p>
-                    </div>
-                    <span className="text-sm font-bold text-white shrink-0">{formatCurrency(product.revenue)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-white/30 text-center py-8">No sales yet. Start selling to see top products!</p>
-            )}
-          </div>
+          ))}
+        </div>
+      )}
 
-          {/* Recent Buyers */}
-          <div className="lg:col-span-5 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
-            <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Recent Buyers</h2>
-            {recentBuyers.length > 0 ? (
-              <div className="space-y-1">
-                {recentBuyers.slice(0, 6).map((sale) => (
-                  <div key={sale.id} className="flex items-center gap-3 py-3 px-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-default">
-                    <div className="h-9 w-9 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                      {getInitials(sale.buyerName)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{sale.buyerName}</p>
-                      <p className="text-[10px] text-white/30 mt-0.5">{sale.productTitle}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-white">{formatCurrency(sale.totalAmount)}</p>
-                      <p className="text-[10px] text-white/30">{formatDate(sale.date)}</p>
-                    </div>
-                  </div>
-                ))}
+      {/* Add Product Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowAddModal(false)}>
+          <div className="bg-[#0A0A0A] border border-white/[0.1] rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-6">Add New Product</h2>
+            <form onSubmit={handleAddProduct} className="space-y-4">
+              <input name="title" type="text" placeholder="Product Title" required
+                className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+              <input name="description" type="text" placeholder="Description"
+                className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+              <div className="grid grid-cols-2 gap-4">
+                <input name="price" type="number" step="0.01" placeholder="Price" required
+                  className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <input name="stock" type="number" placeholder="Stock" required
+                  className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
               </div>
-            ) : (
-              <p className="text-sm text-white/30 text-center py-8">No buyers yet</p>
-            )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="lg:col-span-12 grid grid-cols-1 sm:grid-cols-3 gap-4 opacity-0">
-            <Link to="/dashboard/my-products" className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 hover:border-white/[0.15] hover:bg-white/[0.02] transition-all group">
-              <Package className="h-8 w-8 text-white/30 mb-3 group-hover:text-white/60 group-hover:scale-110 transition-all" />
-              <h3 className="text-base font-bold text-white mb-1">Manage Products</h3>
-              <p className="text-xs text-white/30">{myProducts.length} products listed</p>
-            </Link>
-            <Link to="/dashboard/sell" className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 hover:border-white/[0.15] hover:bg-white/[0.02] transition-all group">
-              <ShoppingBag className="h-8 w-8 text-white/30 mb-3 group-hover:text-white/60 group-hover:scale-110 transition-all" />
-              <h3 className="text-base font-bold text-white mb-1">Record a Sale</h3>
-              <p className="text-xs text-white/30">Point of sale for your products</p>
-            </Link>
-            <Link to="/dashboard/my-analytics" className="bg-[#050505] border border-white/[0.08] rounded-2xl p-6 hover:border-white/[0.15] hover:bg-white/[0.02] transition-all group">
-              <TrendingUp className="h-8 w-8 text-white/30 mb-3 group-hover:text-white/60 group-hover:scale-110 transition-all" />
-              <h3 className="text-base font-bold text-white mb-1">View Analytics</h3>
-              <p className="text-xs text-white/30">Sales trends and performance</p>
-            </Link>
+              <input name="category" type="text" placeholder="Category"
+                className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+              <input name="image" type="text" placeholder="Image URL"
+                className="w-full h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1 bg-white/5 border-white/10">Cancel</Button>
+                <Button type="submit" className="flex-1 bg-white text-black hover:bg-white/90" disabled={addProductMutation.isPending}>
+                  {addProductMutation.isPending ? 'Adding...' : 'Add Product'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

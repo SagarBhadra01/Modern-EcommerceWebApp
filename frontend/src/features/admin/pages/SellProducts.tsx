@@ -5,9 +5,10 @@ import { cn, formatCurrency, generateId } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { products } from '@/lib/mockData';
 import { useAdminStore } from '@/store/adminStore';
 import type { Product } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { productService } from '@/lib/services/product.service';
 
 interface SaleItem {
   product: Product;
@@ -34,10 +35,21 @@ const SellProducts = () => {
 
   const { addSale, sales } = useAdminStore();
 
-  const filteredProducts = products.filter((p) =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const { data: productData } = useQuery({
+    queryKey: ['admin-products'],
+    queryFn: () => productService.getProducts({ limit: 100 }),
+  });
+  
+  const products = productData?.products || [];
+
+  const filteredProducts = products.filter((p: Product) => {
+    const titleMatch = p.title.toLowerCase().includes(search.toLowerCase());
+    const catNameMatch = typeof p.category === 'string' 
+      ? p.category.toLowerCase().includes(search.toLowerCase()) 
+      : (p.category as any)?.name?.toLowerCase().includes(search.toLowerCase());
+    const catIdMatch = p.id?.toLowerCase().includes(search.toLowerCase());
+    return titleMatch || catNameMatch || catIdMatch;
+  });
 
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
@@ -165,7 +177,7 @@ const SellProducts = () => {
 
             {/* Product Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
-              {filteredProducts.map((product) => {
+              {filteredProducts.map((product: Product) => {
                 const inCart = cart.find((item) => item.product.id === product.id);
                 return (
                   <div
@@ -181,7 +193,7 @@ const SellProducts = () => {
                     <img src={product.images[0]} alt={product.title} className="h-14 w-14 rounded-lg object-cover border border-white/10 group-hover:scale-105 transition-transform shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-white truncate">{product.title}</p>
-                      <p className="text-xs text-white/30 mt-0.5">{product.category}</p>
+                      <p className="text-xs text-white/30 mt-0.5">{typeof product.category === 'object' ? (product.category as any).name : product.category}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-sm font-bold text-white">{formatCurrency(product.price)}</span>
                         {product.stock < 10 && (

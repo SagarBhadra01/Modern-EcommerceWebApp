@@ -117,7 +117,7 @@ const Cart = () => {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <p className="text-xs text-white/40 mt-1">{item.category}</p>
+                  <p className="text-xs text-white/40 mt-1">{typeof item.category === 'object' ? (item.category as any).name : item.category}</p>
                 </div>
                 
                 <div className="flex items-end justify-between mt-4">

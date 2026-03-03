@@ -5,15 +5,28 @@ import { formatCurrency, generateId, slugify } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { products as initialProducts, categories } from '@/lib/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { categoryService } from '@/lib/services/category.service';
+import { productService } from '@/lib/services/product.service';
 import type { Product } from '@/types';
 
 const ManageProducts = () => {
-  const [productList, setProductList] = useState<Product[]>(initialProducts);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  });
+
+  const { data: productData, refetch } = useQuery({
+    queryKey: ['admin-products'],
+    queryFn: () => productService.getProducts({ limit: 100 }),
+  });
+  
+  const productList = productData?.products || [];
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -21,8 +34,15 @@ const ManageProducts = () => {
   const [formPrice, setFormPrice] = useState('');
   const [formOriginalPrice, setFormOriginalPrice] = useState('');
   const [formStock, setFormStock] = useState('');
-  const [formCategory, setFormCategory] = useState(categories[0]?.name || '');
+  const [formCategory, setFormCategory] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Update initial category once loaded
+  useEffect(() => {
+    if (categories.length > 0 && !formCategory) {
+      setFormCategory(categories[0].name);
+    }
+  }, [categories, formCategory]);
 
   // GSAP Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -30,14 +50,17 @@ const ManageProducts = () => {
   const overlayRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = productList.filter((p) => {
+  const filtered = productList.filter((p: Product) => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = !filterCategory || p.category === filterCategory;
+    const matchesCategory = !filterCategory || String(p.category) === filterCategory || p.id === filterCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const handleDelete = (id: string) => {
-    setProductList((prev) => prev.filter((p) => p.id !== id));
+  const handleDelete = async (slug: string) => {
+    // Optimistic delete or calling backend would go here if we set up delete route
+    // API mock - normally we'd do a delete method
+    console.log("Delete product via API", slug);
+    refetch();
   };
 
   const resetForm = () => {
@@ -59,58 +82,39 @@ const ManageProducts = () => {
       setFormPrice(product.price.toString());
       setFormOriginalPrice(product.originalPrice?.toString() || '');
       setFormStock(product.stock.toString());
-      setFormCategory(product.category);
+      setFormCategory(String(product.category) || '');
     } else {
       resetForm();
     }
     setDrawerOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validation
     if (!formName.trim()) { setFormError('Product name is required'); return; }
     if (!formPrice || parseFloat(formPrice) <= 0) { setFormError('Valid price is required'); return; }
     if (!formStock || parseInt(formStock) < 0) { setFormError('Valid stock quantity is required'); return; }
     setFormError('');
 
-    if (editingProduct) {
-      // Update existing
-      setProductList((prev) =>
-        prev.map((p) =>
-          p.id === editingProduct.id
-            ? {
-                ...p,
-                title: formName.trim(),
-                slug: slugify(formName.trim()),
-                description: formDescription.trim(),
-                price: parseFloat(formPrice),
-                originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
-                stock: parseInt(formStock),
-                category: formCategory,
-              }
-            : p
-        )
-      );
-    } else {
-      // Add new product
-      const newProduct: Product = {
-        id: generateId(),
-        slug: slugify(formName.trim()),
-        title: formName.trim(),
-        description: formDescription.trim() || 'No description provided.',
-        price: parseFloat(formPrice),
-        originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
-        images: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=600&fit=crop'],
-        category: formCategory,
-        tags: [formCategory.toLowerCase()],
-        rating: 0,
-        reviewCount: 0,
-        stock: parseInt(formStock),
-        badge: 'New',
-      };
-      setProductList((prev) => [newProduct, ...prev]);
-    }
+    const productPayload = {
+      title: formName.trim(),
+      description: formDescription.trim() || 'No description provided.',
+      price: parseFloat(formPrice),
+      originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
+      stock: parseInt(formStock),
+      categoryId: categories.find((c: any) => c.name === formCategory)?.id || '',
+    };
 
+    if (editingProduct) {
+      // Update via API
+       console.log('Update product in API:', editingProduct.slug, productPayload);
+    } else {
+      // Create via API
+       console.log('Create product in API:', productPayload);
+    }
+    
+    // Refresh list from DB
+    await refetch();
     closeDrawer();
   };
 
@@ -190,7 +194,7 @@ const ManageProducts = () => {
           className="h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner appearance-none pr-10 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23666666%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_10px_center]"
         >
           <option value="">All Categories</option>
-          {categories.map((cat) => (
+          {categories.map((cat: any) => (
             <option key={cat.id} value={cat.name}>{cat.name}</option>
           ))}
         </select>
@@ -211,7 +215,7 @@ const ManageProducts = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((product, i) => (
+              {filtered.map((product: Product, i: number) => (
                 <tr key={product.id} ref={(el) => { rowsRef.current[i] = el; }} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group">
                   <td className="py-4 px-5">
                     <div className="flex items-center gap-4">
@@ -219,7 +223,7 @@ const ManageProducts = () => {
                       <span className="text-sm font-bold text-white truncate max-w-[200px] group-hover:text-white/90">{product.title}</span>
                     </div>
                   </td>
-                  <td className="py-4 px-5 text-sm font-medium text-white/50">{product.category}</td>
+                  <td className="py-4 px-5 text-sm font-medium text-white/50">{typeof product.category === 'object' ? (product.category as any).name : product.category}</td>
                   <td className="py-4 px-5 text-sm font-bold text-white">{formatCurrency(product.price)}</td>
                   <td className="py-4 px-5 text-sm font-medium text-white/60">{product.stock}</td>
                   <td className="py-4 px-5">

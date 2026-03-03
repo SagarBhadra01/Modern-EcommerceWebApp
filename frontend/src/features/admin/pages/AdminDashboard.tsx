@@ -1,16 +1,10 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { DollarSign, ShoppingBag, Users, Package, ArrowUpRight, TrendingUp, Crown } from 'lucide-react';
+import { DollarSign, ShoppingBag, Users, Package, ArrowUpRight, TrendingUp, Crown, Loader2 } from 'lucide-react';
 import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
-import { orders, topSellingProducts, revenueByMonth, salesTransactions, categoryRevenue } from '@/lib/mockData';
-
-const stats = [
-  { label: 'Total Revenue', value: '$48,250', trend: '+22%', icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
-  { label: 'Total Orders', value: '1,247', trend: '+15%', icon: ShoppingBag, color: 'from-blue-500/20 to-blue-500/5' },
-  { label: 'Active Customers', value: '3,240', trend: '+8%', icon: Users, color: 'from-purple-500/20 to-purple-500/5' },
-  { label: 'Products Listed', value: '156', trend: '+4', icon: Package, color: 'from-amber-500/20 to-amber-500/5' },
-];
+import { useQuery } from '@tanstack/react-query';
+import { adminService } from '@/lib/services/admin.service';
 
 const statusMap: Record<string, { variant: 'default' | 'success' | 'warning' | 'danger' | 'info'; label: string }> = {
   processing: { variant: 'warning', label: 'Processing' },
@@ -23,9 +17,31 @@ const AdminDashboard = () => {
   const statsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
-  const catChartRef = useRef<HTMLDivElement>(null);
+
+  const { data: adminStats, isLoading } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: adminService.getStats,
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ['admin-analytics'],
+    queryFn: adminService.getAnalytics,
+  });
+
+  const stats = adminStats ? [
+    { label: 'Total Revenue', value: formatCurrency(adminStats.totalRevenue), trend: '+' + adminStats.revenueByDay.length + 'd data', icon: DollarSign, color: 'from-emerald-500/20 to-emerald-500/5' },
+    { label: 'Total Orders', value: adminStats.totalOrders.toLocaleString(), trend: 'All time', icon: ShoppingBag, color: 'from-blue-500/20 to-blue-500/5' },
+    { label: 'Total Users', value: adminStats.totalUsers.toLocaleString(), trend: 'Registered', icon: Users, color: 'from-purple-500/20 to-purple-500/5' },
+    { label: 'Products Listed', value: adminStats.totalProducts.toLocaleString(), trend: 'Active', icon: Package, color: 'from-amber-500/20 to-amber-500/5' },
+  ] : [];
+
+  // Revenue chart data
+  const revenueByDay = adminStats?.revenueByDay || [];
+  const maxRevenue = Math.max(...revenueByDay.map((d) => d.revenue), 1);
 
   useEffect(() => {
+    if (isLoading || !adminStats) return;
+
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
       
@@ -46,21 +62,21 @@ const AdminDashboard = () => {
         gsap.fromTo(
           chartRef.current.children,
           { height: 0 },
-          { height: (i: number) => `${(revenueByMonth[i]?.revenue / 500)}%`, duration: 1, stagger: 0.08, ease: 'back.out(1.5)', delay: 0.5 }
-        );
-      }
-
-      if (catChartRef.current) {
-        gsap.fromTo(
-          catChartRef.current.querySelectorAll('.cat-bar'),
-          { width: 0 },
-          { width: (i: number) => `${categoryRevenue[i]?.percentage}%`, duration: 0.8, stagger: 0.1, ease: 'power3.out', delay: 0.8 }
+          { height: (i: number) => `${(revenueByDay[i]?.revenue / maxRevenue) * 100}%`, duration: 1, stagger: 0.05, ease: 'back.out(1.5)', delay: 0.5 }
         );
       }
     });
 
     return () => ctx.revert();
-  }, []);
+  }, [isLoading, adminStats]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 text-white/30 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -93,114 +109,78 @@ const AdminDashboard = () => {
 
       <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Revenue Chart */}
-        <div className="lg:col-span-7 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
+        <div className="lg:col-span-8 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-bold text-white tracking-tight">Revenue Overview</h2>
-              <p className="text-xs text-white/30 mt-1">Last 6 months performance</p>
+              <p className="text-xs text-white/30 mt-1">Last {revenueByDay.length} days</p>
             </div>
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg">
               <TrendingUp className="h-3.5 w-3.5" />
-              <span>+22% growth</span>
+              <span>{formatCurrency(adminStats?.totalRevenue || 0)} total</span>
             </div>
           </div>
-          <div ref={chartRef} className="flex items-end gap-3 h-52">
-            {revenueByMonth.map((d, i) => (
+          <div ref={chartRef} className="flex items-end gap-1 h-52">
+            {revenueByDay.slice(-20).map((d, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-2">
                 <div
                   className="w-full bg-gradient-to-t from-white/[0.12] to-white/[0.04] hover:from-white/[0.20] hover:to-white/[0.08] rounded-t-xl transition-all duration-300 cursor-pointer relative group"
                   style={{ height: '0%' }}
                 >
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-black text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
-                    ${(d.revenue / 1000).toFixed(1)}k
+                    {formatCurrency(d.revenue)}
                   </div>
                 </div>
               </div>
             ))}
           </div>
           <div className="flex justify-between mt-3 px-1">
-            {revenueByMonth.map((d) => (
-              <span key={d.month} className="text-[10px] font-bold text-white/25 flex-1 text-center uppercase tracking-wider">{d.month}</span>
+            {revenueByDay.slice(-20).map((d, i) => (
+              <span key={i} className="text-[8px] font-bold text-white/20 flex-1 text-center">{d.date.slice(5)}</span>
             ))}
           </div>
         </div>
 
-        {/* Top Selling Products */}
-        <div className="lg:col-span-5 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
+        {/* Top Buyers */}
+        <div className="lg:col-span-4 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-white tracking-tight">Top Selling</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">Top Buyers</h2>
             <Crown className="h-4 w-4 text-amber-400" />
           </div>
           <div className="space-y-1">
-            {topSellingProducts.map((product, i) => (
-              <div key={product.productId} className="flex items-center gap-4 py-3 px-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-default group" data-hover>
+            {(analytics?.topBuyers || []).slice(0, 6).map((buyer, i) => (
+              <div key={buyer.email || i} className="flex items-center gap-3 py-3 px-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-default" data-hover>
                 <span className="text-xs font-bold text-white/20 w-5 text-center">#{i + 1}</span>
-                <img src={product.image} alt={product.title} className="h-10 w-10 rounded-lg object-cover border border-white/10 group-hover:scale-105 transition-transform" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{product.title}</p>
-                  <p className="text-xs text-white/30 mt-0.5">{product.unitsSold} units sold</p>
-                </div>
-                <span className="text-sm font-bold text-white shrink-0">{formatCurrency(product.revenue)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Category Revenue */}
-        <div className="lg:col-span-5 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
-          <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Sales by Category</h2>
-          <div ref={catChartRef} className="space-y-4">
-            {categoryRevenue.map((cat) => (
-              <div key={cat.category}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-medium text-white/70">{cat.category}</span>
-                  <span className="text-xs font-bold text-white/40">{cat.percentage}%</span>
-                </div>
-                <div className="h-2.5 bg-white/[0.04] rounded-full overflow-hidden">
-                  <div
-                    className="cat-bar h-full rounded-full bg-gradient-to-r from-white/30 to-white/10"
-                    style={{ width: '0%' }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Buyers */}
-        <div className="lg:col-span-4 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
-          <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Recent Buyers</h2>
-          <div className="space-y-1">
-            {salesTransactions.slice(0, 6).map((sale) => (
-              <div key={sale.id} className="flex items-center gap-3 py-3 px-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-default" data-hover>
                 <div className="h-9 w-9 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {getInitials(sale.buyerName)}
+                  {getInitials(buyer.name || 'U')}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{sale.buyerName}</p>
-                  <p className="text-[10px] text-white/30 mt-0.5">{sale.productTitle}</p>
+                  <p className="text-sm font-bold text-white truncate">{buyer.name || 'Unknown'}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">{buyer.orderCount} orders</p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-white">{formatCurrency(sale.totalAmount)}</p>
-                  <p className="text-[10px] text-white/30">{formatDate(sale.date)}</p>
-                </div>
+                <span className="text-sm font-bold text-white shrink-0">{formatCurrency(buyer.totalSpent)}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Recent Orders */}
-        <div className="lg:col-span-3 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
+        <div className="lg:col-span-12 bg-[#050505] border border-white/[0.08] shadow-xl rounded-2xl p-6 opacity-0">
           <h2 className="text-lg font-bold text-white mb-6 tracking-tight">Recent Orders</h2>
           <div className="space-y-1">
-            {orders.slice(0, 5).map((order) => (
+            {(adminStats?.recentOrders || []).map((order) => (
               <div key={order.id} className="flex items-center justify-between py-3 px-2 rounded-xl border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors cursor-default" data-hover>
-                <div>
-                  <p className="text-xs font-mono font-bold text-white/90">{order.id}</p>
-                  <p className="text-[10px] text-white/30 mt-1">{formatDate(order.createdAt)}</p>
+                <div className="flex items-center gap-4">
+                  <div className="h-9 w-9 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {getInitials(order.user.name)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{order.user.name}</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Order #{order.id.slice(0, 8)} • {formatDate(order.createdAt)}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-white mb-1.5">{formatCurrency(order.total)}</p>
+                <div className="text-right flex items-center gap-4">
+                  <p className="text-sm font-bold text-white">{formatCurrency(order.total)}</p>
                   <Badge variant={statusMap[order.status]?.variant || 'default'}>
                     {statusMap[order.status]?.label || order.status}
                   </Badge>

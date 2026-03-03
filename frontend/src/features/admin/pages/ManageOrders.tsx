@@ -3,8 +3,9 @@ import gsap from 'gsap';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { orders } from '@/lib/mockData';
-import type { Order } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { adminService } from '@/lib/services/admin.service';
+import { Loader2 } from 'lucide-react';
 
 const statusOptions = ['processing', 'shipped', 'delivered', 'cancelled'] as const;
 const statusFilters = ['All', 'Processing', 'Shipped', 'Delivered', 'Cancelled'] as const;
@@ -17,20 +18,29 @@ const statusMap: Record<string, { variant: 'default' | 'success' | 'warning' | '
 };
 
 const ManageOrders = () => {
-  const [orderList, setOrderList] = useState<Order[]>(orders);
   const [activeFilter, setActiveFilter] = useState<typeof statusFilters[number]>('All');
+  const queryClient = useQueryClient();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([]);
 
-  const filteredOrders = activeFilter === 'All'
-    ? orderList
-    : orderList.filter((o) => o.status === activeFilter.toLowerCase());
+  const { data: orderData, isLoading } = useQuery({
+    queryKey: ['admin-orders', activeFilter],
+    queryFn: () => adminService.getOrders({
+      limit: 50,
+      status: activeFilter === 'All' ? undefined : activeFilter.toLowerCase(),
+    }),
+  });
 
-  const updateStatus = (orderId: string, newStatus: Order['status']) => {
-    setOrderList((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
+  const orders = orderData?.orders || [];
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => adminService.updateOrderStatus(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+  });
+
+  const updateStatus = (orderId: string, newStatus: string) => {
+    updateStatusMutation.mutate({ id: orderId, status: newStatus });
   };
 
   useEffect(() => {
@@ -50,7 +60,7 @@ const ManageOrders = () => {
         { opacity: 1, x: 0, duration: 0.4, stagger: 0.03, ease: 'power2.out', clearProps: 'all' }
       );
     }
-  }, [activeFilter, filteredOrders.length]);
+  }, [activeFilter, orders.length]);
 
   return (
     <div ref={containerRef} className="opacity-0">
@@ -81,58 +91,62 @@ const ManageOrders = () => {
 
       {/* Table */}
       <div className="bg-[#050505] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/[0.08] bg-white/[0.02]">
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Order ID</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Customer</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Date</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Items</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Total</th>
-                <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map((order, i) => (
-                <tr key={order.id} ref={(el) => { rowsRef.current[i] = el; }} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group">
-                  <td className="py-4 px-5 text-sm font-mono text-white/90 group-hover:text-white transition-colors">{order.id}</td>
-                  <td className="py-4 px-5 text-sm font-medium text-white/80">{order.shippingAddress.fullName}</td>
-                  <td className="py-4 px-5 text-sm text-white/50">{formatDate(order.createdAt)}</td>
-                  <td className="py-4 px-5 text-sm font-medium text-white/60">{order.items.length}</td>
-                  <td className="py-4 px-5 text-sm font-bold text-white">{formatCurrency(order.total)}</td>
-                  <td className="py-4 px-5">
-                    <div className="relative inline-block">
-                      <select
-                        value={order.status}
-                        onChange={(e) => updateStatus(order.id, e.target.value as Order['status'])}
-                        className={cn(
-                          'h-9 pl-3 pr-8 text-xs font-bold rounded-lg border bg-black focus:outline-none focus:ring-2 appearance-none cursor-pointer transition-colors hover:bg-white/[0.02]',
-                          order.status === 'processing' && 'text-warning border-warning/30 focus:ring-warning/20',
-                          order.status === 'shipped' && 'text-white/70 border-white/20 focus:ring-white/20',
-                          order.status === 'delivered' && 'text-success border-success/30 focus:ring-success/20',
-                          order.status === 'cancelled' && 'text-danger border-danger/30 focus:ring-danger/20',
-                        )}
-                      >
-                        {statusOptions.map((s) => (
-                          <option key={s} value={s} className="bg-black text-white">
-                            {s.charAt(0).toUpperCase() + s.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white/40">
-                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                          <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                        </svg>
-                      </div>
-                    </div>
-                  </td>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 text-white/30 animate-spin" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Order ID</th>
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Customer</th>
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Date</th>
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Items</th>
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Total</th>
+                  <th className="text-left font-semibold py-4 px-5 text-xs text-white/40 uppercase tracking-wider">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {filteredOrders.length === 0 && (
+              </thead>
+              <tbody>
+                {orders.map((order, i) => (
+                  <tr key={order.id} ref={(el) => { rowsRef.current[i] = el; }} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group">
+                    <td className="py-4 px-5 text-sm font-mono text-white/90 group-hover:text-white transition-colors">{order.id.slice(0, 12)}...</td>
+                    <td className="py-4 px-5 text-sm font-medium text-white/80">{order.user.name}</td>
+                    <td className="py-4 px-5 text-sm text-white/50">{formatDate(order.createdAt)}</td>
+                    <td className="py-4 px-5 text-sm font-medium text-white/60">{order.items.length}</td>
+                    <td className="py-4 px-5 text-sm font-bold text-white">{formatCurrency(order.total)}</td>
+                    <td className="py-4 px-5">
+                      <div className="relative inline-block">
+                        <select
+                          value={order.status}
+                          onChange={(e) => updateStatus(order.id, e.target.value)}
+                          className={cn(
+                            'h-9 pl-3 pr-8 text-xs font-bold rounded-lg border bg-black focus:outline-none focus:ring-2 appearance-none cursor-pointer transition-colors hover:bg-white/[0.02]',
+                            order.status === 'processing' && 'text-warning border-warning/30 focus:ring-warning/20',
+                            order.status === 'shipped' && 'text-white/70 border-white/20 focus:ring-white/20',
+                            order.status === 'delivered' && 'text-success border-success/30 focus:ring-success/20',
+                            order.status === 'cancelled' && 'text-danger border-danger/30 focus:ring-danger/20',
+                          )}
+                        >
+                          {statusOptions.map((s) => (
+                            <option key={s} value={s} className="bg-black text-white">
+                              {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white/40">
+                          <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!isLoading && orders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
              <div className="h-16 w-16 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center mb-4">
               <span className="text-white/20 text-2xl">🛒</span>

@@ -5,10 +5,11 @@ import { formatCurrency, getInitials } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { categories } from '@/lib/mockData';
 import { useUser } from '@clerk/clerk-react';
 import { useSellerStore } from '@/store/sellerStore';
 import type { SellerProduct } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { categoryService } from '@/lib/services/category.service';
 
 const MyProducts = () => {
   const { user } = useUser();
@@ -17,6 +18,11 @@ const MyProducts = () => {
 
   const { getMyProducts, addProduct, updateProduct, deleteProduct } = useSellerStore();
   const myProducts = getMyProducts(sellerId);
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  });
 
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -29,8 +35,15 @@ const MyProducts = () => {
   const [formPrice, setFormPrice] = useState('');
   const [formOriginalPrice, setFormOriginalPrice] = useState('');
   const [formStock, setFormStock] = useState('');
-  const [formCategory, setFormCategory] = useState(categories[0]?.name || '');
+  const [formCategory, setFormCategory] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Update initial category once loaded
+  useEffect(() => {
+    if (categories.length > 0 && !formCategory) {
+      setFormCategory(categories[0].name);
+    }
+  }, [categories, formCategory]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -170,7 +183,7 @@ const MyProducts = () => {
                         <span className="text-sm font-bold text-white truncate max-w-[200px]">{product.title}</span>
                       </div>
                     </td>
-                    <td className="py-4 px-5 text-sm text-white/50">{product.category}</td>
+                    <td className="py-4 px-5 text-sm text-white/50">{typeof product.category === 'object' ? (product.category as any).name : product.category}</td>
                     <td className="py-4 px-5 text-sm font-bold text-white">{formatCurrency(product.price)}</td>
                     <td className="py-4 px-5 text-sm text-white/60">{product.stock}</td>
                     <td className="py-4 px-5"><Badge variant={statusVariant(product.status)}>{product.status}</Badge></td>
