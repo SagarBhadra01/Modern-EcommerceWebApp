@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { router } from '@/router';
+import { useUserSync } from '@/hooks/useUserSync';
 import gsap from 'gsap';
 
 // ─── Pure GSAP Custom Cursor (Global) ───────────────────────────────
@@ -64,6 +65,9 @@ const GlobalCursor = () => {
 };
 
 function App() {
+  // Sync Clerk user to backend database on login
+  useUserSync();
+
   return (
     <>
       <GlobalCursor />
