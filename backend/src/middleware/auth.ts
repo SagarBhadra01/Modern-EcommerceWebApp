@@ -7,13 +7,15 @@ export const clerkAuth = clerkMiddleware();
 
 /**
  * Requires a valid Clerk session. Returns 401 if not authenticated.
+ * Also auto-syncs user to DB using Clerk JWT claims.
  */
 export const requireAuth = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { userId } = getAuth(req);
+  const auth = getAuth(req);
+  const userId = auth?.userId;
 
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized', message: 'You must be logged in.' });
@@ -22,6 +24,21 @@ export const requireAuth = async (
 
   // Attach clerkId to request for downstream use
   (req as any).clerkId = userId;
+
+  // Try to extract user profile from Clerk session claims for auto-upsert
+  try {
+    const sessionClaims = auth?.sessionClaims as any;
+    if (sessionClaims) {
+      (req as any).clerkUser = {
+        name: sessionClaims?.name || sessionClaims?.fullName || `${sessionClaims?.first_name || ''} ${sessionClaims?.last_name || ''}`.trim() || 'User',
+        email: sessionClaims?.email || sessionClaims?.primaryEmail || '',
+        avatar: sessionClaims?.image_url || sessionClaims?.picture || sessionClaims?.avatar || '',
+      };
+    }
+  } catch {
+    // Non-critical: downstream can handle missing clerkUser
+  }
+
   next();
 };
 
@@ -44,7 +61,7 @@ export const requireAdmin = async (
   const user = await prisma.user.findUnique({ where: { clerkId } });
 
   if (!user || user.role !== 'admin') {
-    res.status(403).json({ error: 'Forbidden', message: 'Admin access required.' });
+    res.status(403).json({ error: 'Forbidden', message: 'Admin access required. Ask an admin to promote your account.' });
     return;
   }
 

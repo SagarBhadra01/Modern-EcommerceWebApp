@@ -1,23 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { Plus, Search, Edit, Trash2, X, Package } from 'lucide-react';
-import { formatCurrency, getInitials } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { useUser } from '@clerk/clerk-react';
-import { useSellerStore } from '@/store/sellerStore';
-import type { SellerProduct } from '@/types';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { categoryService } from '@/lib/services/category.service';
+import { sellerService } from '@/lib/services/seller.service';
+import type { SellerProduct } from '@/types';
+
+const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=600&fit=crop';
 
 const MyProducts = () => {
-  const { user } = useUser();
-  const sellerId = user?.id || '';
-  const sellerName = user?.fullName || user?.firstName || 'Seller';
+  const queryClient = useQueryClient();
 
-  const { getMyProducts, addProduct, updateProduct, deleteProduct } = useSellerStore();
-  const myProducts = getMyProducts(sellerId);
+  const { data: myProducts = [], isLoading } = useQuery({
+    queryKey: ['seller-products'],
+    queryFn: sellerService.getProducts,
+  });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
@@ -37,6 +38,7 @@ const MyProducts = () => {
   const [formStock, setFormStock] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formError, setFormError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Update initial category once loaded
   useEffect(() => {
@@ -50,7 +52,30 @@ const MyProducts = () => {
   const overlayRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = myProducts.filter((p) => {
+  const createMutation = useMutation({
+    mutationFn: sellerService.createProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => sellerService.updateProduct(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-products'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: sellerService.deleteProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  const filtered = (myProducts as SellerProduct[]).filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = !filterCategory || p.category === filterCategory;
     return matchesSearch && matchesCategory;
@@ -65,43 +90,66 @@ const MyProducts = () => {
   const openDrawer = (product?: SellerProduct) => {
     if (product) {
       setEditingProduct(product);
-      setFormName(product.title); setFormDescription(product.description);
-      setFormPrice(product.price.toString()); setFormOriginalPrice(product.originalPrice?.toString() || '');
-      setFormStock(product.stock.toString()); setFormCategory(product.category);
-    } else { resetForm(); }
+      setFormName(product.title);
+      setFormDescription(product.description);
+      setFormPrice(product.price.toString());
+      setFormOriginalPrice(product.originalPrice?.toString() || '');
+      setFormStock(product.stock.toString());
+      setFormCategory(product.category);
+    } else {
+      resetForm();
+    }
     setDrawerOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formName.trim()) { setFormError('Product name is required'); return; }
     if (!formPrice || parseFloat(formPrice) <= 0) { setFormError('Valid price is required'); return; }
     if (!formStock || parseInt(formStock) < 0) { setFormError('Valid stock is required'); return; }
+    if (!formCategory) { setFormError('Please select a category'); return; }
     setFormError('');
+    setIsSaving(true);
 
-    if (editingProduct) {
-      updateProduct(editingProduct.id, {
-        title: formName.trim(),
-        description: formDescription.trim(),
-        price: parseFloat(formPrice),
-        originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
-        stock: parseInt(formStock),
-        category: formCategory,
-        status: parseInt(formStock) > 0 ? 'active' : 'sold_out',
-      });
-    } else {
-      addProduct({
-        sellerId,
-        sellerName,
-        title: formName.trim(),
-        description: formDescription.trim() || 'No description provided.',
-        price: parseFloat(formPrice),
-        originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
-        images: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=600&fit=crop'],
-        category: formCategory,
-        stock: parseInt(formStock),
-      });
+    try {
+      if (editingProduct) {
+        await updateMutation.mutateAsync({
+          id: editingProduct.id,
+          data: {
+            title: formName.trim(),
+            description: formDescription.trim() || 'No description provided.',
+            price: parseFloat(formPrice),
+            originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
+            stock: parseInt(formStock),
+            category: formCategory,
+            status: parseInt(formStock) > 0 ? 'active' : 'sold_out',
+          },
+        });
+      } else {
+        await createMutation.mutateAsync({
+          title: formName.trim(),
+          description: formDescription.trim() || 'No description provided.',
+          price: parseFloat(formPrice),
+          originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
+          images: [DEFAULT_IMAGE],
+          category: formCategory,
+          stock: parseInt(formStock),
+        });
+      }
+      closeDrawer();
+    } catch (err: any) {
+      setFormError(err?.response?.data?.message || 'Failed to save product. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    closeDrawer();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this product?')) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete product.');
+    }
   };
 
   useEffect(() => {
@@ -138,7 +186,7 @@ const MyProducts = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">My Products</h1>
-          <p className="text-xs text-white/30 mt-1">{myProducts.length} products listed by you</p>
+          <p className="text-xs text-white/30 mt-1">{(myProducts as SellerProduct[]).length} products listed by you</p>
         </div>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => openDrawer()} className="shadow-[0_0_15px_rgba(255,255,255,0.1)]">
           Add Product
@@ -153,14 +201,16 @@ const MyProducts = () => {
             className="w-full h-11 pl-11 pr-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner transition-all" />
         </div>
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
-          className="h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner appearance-none pr-10 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23666666%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_10px_center]">
+          className="h-11 px-4 bg-[#050505] border border-white/[0.08] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner appearance-none pr-10">
           <option value="">All Categories</option>
           {categories.map((cat) => (<option key={cat.id} value={cat.name}>{cat.name}</option>))}
         </select>
       </div>
 
-      {/* Table */}
-      {filtered.length > 0 ? (
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="bg-[#050505] border border-white/[0.08] rounded-2xl p-16 text-center text-white/30">Loading products...</div>
+      ) : filtered.length > 0 ? (
         <div className="bg-[#050505] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -183,14 +233,14 @@ const MyProducts = () => {
                         <span className="text-sm font-bold text-white truncate max-w-[200px]">{product.title}</span>
                       </div>
                     </td>
-                    <td className="py-4 px-5 text-sm text-white/50">{typeof product.category === 'object' ? (product.category as any).name : product.category}</td>
+                    <td className="py-4 px-5 text-sm text-white/50">{product.category}</td>
                     <td className="py-4 px-5 text-sm font-bold text-white">{formatCurrency(product.price)}</td>
                     <td className="py-4 px-5 text-sm text-white/60">{product.stock}</td>
                     <td className="py-4 px-5"><Badge variant={statusVariant(product.status)}>{product.status}</Badge></td>
                     <td className="py-4 px-5">
                       <div className="flex items-center gap-2">
                         <button onClick={() => openDrawer(product)} className="p-2 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-all"><Edit className="h-4 w-4" /></button>
-                        <button onClick={() => deleteProduct(product.id)} className="p-2 rounded-lg text-white/30 hover:text-danger hover:bg-danger/10 transition-all"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => handleDelete(product.id)} className="p-2 rounded-lg text-white/30 hover:text-danger hover:bg-danger/10 transition-all"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -245,13 +295,13 @@ const MyProducts = () => {
               <div>
                 <label className="block text-sm font-bold text-white mb-2">Category</label>
                 <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
-                  className="w-full h-11 px-4 bg-black border border-white/[0.08] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner appearance-none pr-10 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23666666%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_10px_center]">
+                  className="w-full h-11 px-4 bg-black border border-white/[0.08] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner appearance-none pr-10">
                   {categories.map((cat) => (<option key={cat.id} value={cat.name}>{cat.name}</option>))}
                 </select>
               </div>
               <div className="pt-4">
-                <Button fullWidth size="lg" onClick={handleSave} className="shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                  {editingProduct ? 'Update Product' : 'List Product for Sale'}
+                <Button fullWidth size="lg" onClick={handleSave} disabled={isSaving} className="shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                  {isSaving ? 'Saving...' : editingProduct ? 'Update Product' : 'List Product for Sale'}
                 </Button>
               </div>
             </div>

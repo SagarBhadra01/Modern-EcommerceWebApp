@@ -9,11 +9,35 @@ export const api = axios.create({
   },
 });
 
+/**
+ * Waits for Clerk to initialize and returns a session token.
+ * Retries up to 10 times with 300ms delay to handle cases where
+ * Clerk hasn't initialized yet when the first API calls fire.
+ */
+async function getClerkToken(retries = 10): Promise<string | null> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const clerk = (window as any).Clerk;
+      if (clerk?.session) {
+        const token = await clerk.session.getToken();
+        if (token) return token;
+      }
+    } catch {
+      // Clerk not ready yet
+    }
+    // Wait before retrying
+    if (i < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  return null;
+}
+
 // Attach Clerk session token to every request
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await (window as any).Clerk?.session?.getToken();
+      const token = await getClerkToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -44,7 +68,10 @@ declare module 'axios' {
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    console.error('API Error:', error.response?.data || error.message);
+    const status = error.response?.status;
+    const data = error.response?.data;
+    // Log for debugging — shows full Zod field errors
+    console.error(`API Error [${status}]:`, data || error.message);
     return Promise.reject(error);
   }
 );

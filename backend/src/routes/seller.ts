@@ -7,27 +7,63 @@ import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
 
-// ── Helper ────────────────────────────────────
-async function getDbUser(clerkId: string) {
-  return prisma.user.findUnique({ where: { clerkId } });
+// ── Helpers ────────────────────────────────────
+async function getOrCreateDbUser(clerkId: string, clerkUser?: { name?: string; email?: string; avatar?: string }) {
+  let user = await prisma.user.findUnique({ where: { clerkId } });
+  if (!user && clerkUser?.email) {
+    user = await prisma.user.upsert({
+      where: { clerkId },
+      update: { name: clerkUser.name || 'User', avatar: clerkUser.avatar },
+      create: {
+        clerkId,
+        name: clerkUser.name || 'User',
+        email: clerkUser.email,
+        avatar: clerkUser.avatar,
+        role: 'user',
+        status: 'active',
+      },
+    });
+  }
+  return user;
 }
 
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[\s\W-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return text.toLowerCase().trim().replace(/[\s\W-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Resolves a category name (e.g. "Electronics") to a category ID.
+ * Returns null if no matching category exists.
+ */
+async function resolveCategoryId(categoryName: string): Promise<string | null> {
+  if (!categoryName) return null;
+  const category = await prisma.category.findFirst({
+    where: {
+      OR: [
+        { name: { equals: categoryName, mode: 'insensitive' } },
+        { slug: { equals: slugify(categoryName), mode: 'insensitive' } },
+      ],
+    },
+  });
+  return category?.id || null;
+}
+
+/**
+ * Generates a globally unique slug for the products table.
+ */
+async function uniqueProductSlug(baseSlug: string): Promise<string> {
+  const existing = await prisma.product.findUnique({ where: { slug: baseSlug } });
+  return existing ? `${baseSlug}-${Date.now()}` : baseSlug;
 }
 
 // ── Schemas ───────────────────────────────────
 const createSellerProductSchema = z.object({
   title: z.string().min(2),
-  description: z.string().min(10),
+  description: z.string().min(1).default('No description provided.'),
   price: z.number().positive(),
   originalPrice: z.number().positive().optional(),
-  images: z.array(z.string()).min(1),
-  category: z.string().min(2),
+  images: z.array(z.string()).min(1).default(['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=600&fit=crop']),
+  category: z.string().min(1),
   stock: z.number().int().min(0),
 });
 
@@ -51,7 +87,8 @@ router.get(
   '/products',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const clerkUser = (req as any).clerkUser;
+    const user = await getOrCreateDbUser((req as any).clerkId, clerkUser);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
@@ -67,47 +104,80 @@ router.get(
 );
 
 // POST /api/seller/products — Add a product
+// Creates in BOTH seller_products AND products tables (dual-write)
+// so the product appears in the seller dashboard AND the global shop.
 router.post(
   '/products',
   requireAuth,
   validate(createSellerProductSchema),
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const clerkUser = (req as any).clerkUser;
+    const user = await getOrCreateDbUser((req as any).clerkId, clerkUser);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
     }
 
-    const slug = slugify(req.body.title);
-    const status = req.body.stock > 0 ? 'active' : 'draft';
-
-    const product = await prisma.sellerProduct.create({
-      data: {
-        ...req.body,
-        slug,
-        status,
-        sellerId: user.id,
-        sellerName: user.name,
-      },
+    const baseSlug = slugify(req.body.title);
+    const sellerSlugExists = await prisma.sellerProduct.findFirst({
+      where: { sellerId: user.id, slug: baseSlug },
     });
+    const sellerSlug = sellerSlugExists ? `${baseSlug}-${Date.now()}` : baseSlug;
+    const globalSlug = await uniqueProductSlug(baseSlug);
+    const status = req.body.stock > 0 ? 'active' : 'draft';
+    const categoryId = await resolveCategoryId(req.body.category);
 
-    res.status(201).json(product);
+    // Dual-write: seller_products + products in a single transaction
+    const [sellerProduct] = await prisma.$transaction([
+      prisma.sellerProduct.create({
+        data: {
+          title: req.body.title,
+          description: req.body.description,
+          price: req.body.price,
+          originalPrice: req.body.originalPrice,
+          images: req.body.images,
+          category: req.body.category,
+          stock: req.body.stock,
+          slug: sellerSlug,
+          status,
+          sellerId: user.id,
+          sellerName: user.name,
+        },
+      }),
+      prisma.product.create({
+        data: {
+          title: req.body.title,
+          slug: globalSlug,
+          description: req.body.description,
+          price: req.body.price,
+          originalPrice: req.body.originalPrice,
+          images: req.body.images,
+          categoryId,
+          tags: [],
+          stock: req.body.stock,
+          sellerId: user.id,
+          sellerName: user.name,
+        },
+      }),
+    ]);
+
+    res.status(201).json(sellerProduct);
   })
 );
 
 // PUT /api/seller/products/:id — Update a product
+// Also updates the matching product in the global products table.
 router.put(
   '/products/:id',
   requireAuth,
   validate(updateSellerProductSchema),
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const user = await getOrCreateDbUser((req as any).clerkId);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
     }
 
-    // Ensure seller owns this product
     const product = await prisma.sellerProduct.findFirst({
       where: { id: req.params.id, sellerId: user.id },
     });
@@ -125,21 +195,44 @@ router.put(
       updates.status = req.body.stock === 0 ? 'sold_out' : 'active';
     }
 
+    // Build the global product updates (map category name → categoryId)
+    const globalUpdates: any = {};
+    if (req.body.title) globalUpdates.title = req.body.title;
+    if (req.body.description) globalUpdates.description = req.body.description;
+    if (req.body.price) globalUpdates.price = req.body.price;
+    if (req.body.originalPrice !== undefined) globalUpdates.originalPrice = req.body.originalPrice;
+    if (req.body.images) globalUpdates.images = req.body.images;
+    if (req.body.stock !== undefined) globalUpdates.stock = req.body.stock;
+    if (req.body.category) {
+      globalUpdates.categoryId = await resolveCategoryId(req.body.category);
+    }
+
     const updated = await prisma.sellerProduct.update({
       where: { id: product.id },
       data: updates,
     });
+
+    // Also sync to global products table (find by sellerId + title match)
+    try {
+      await prisma.product.updateMany({
+        where: { sellerId: user.id, title: product.title },
+        data: globalUpdates,
+      });
+    } catch {
+      // Non-critical: global sync may fail if product doesn't exist in products table yet
+    }
 
     res.json(updated);
   })
 );
 
 // DELETE /api/seller/products/:id — Delete a product
+// Also removes from the global products table.
 router.delete(
   '/products/:id',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const user = await getOrCreateDbUser((req as any).clerkId);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
@@ -154,7 +247,15 @@ router.delete(
       return;
     }
 
-    await prisma.sellerProduct.delete({ where: { id: product.id } });
+    // Delete from both tables in a transaction
+    await prisma.$transaction([
+      prisma.sellerProduct.delete({ where: { id: product.id } }),
+      // Delete matching global product (by sellerId + title)
+      prisma.product.deleteMany({
+        where: { sellerId: user.id, title: product.title },
+      }),
+    ]);
+
     res.json({ message: 'Product deleted.' });
   })
 );
@@ -165,7 +266,7 @@ router.post(
   requireAuth,
   validate(recordSaleSchema),
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const user = await getOrCreateDbUser((req as any).clerkId);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
@@ -217,7 +318,7 @@ router.get(
   '/analytics',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const user = await getDbUser((req as any).clerkId);
+    const user = await getOrCreateDbUser((req as any).clerkId);
     if (!user) {
       res.status(404).json({ error: 'Not Found', message: 'User not found.' });
       return;
@@ -231,7 +332,6 @@ router.get(
     const totalRevenue = sales.reduce((sum, s) => sum + s.totalAmount, 0);
     const totalOrders = sales.length;
 
-    // Top products by revenue
     const productMap = new Map<string, { productId: string; title: string; image: string; unitsSold: number; revenue: number }>();
     sales.forEach((s) => {
       const existing = productMap.get(s.productId);
@@ -253,7 +353,6 @@ router.get(
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    // Revenue by day (last 30 days)
     const dayMap = new Map<string, number>();
     sales.forEach((s) => {
       const date = new Date(s.date).toISOString().split('T')[0];

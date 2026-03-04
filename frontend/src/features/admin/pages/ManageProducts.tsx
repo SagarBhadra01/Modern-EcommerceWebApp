@@ -1,16 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { Plus, Search, Edit, Trash2, X } from 'lucide-react';
-import { formatCurrency, generateId, slugify } from '@/lib/utils';
+import { formatCurrency, slugify } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { categoryService } from '@/lib/services/category.service';
 import { productService } from '@/lib/services/product.service';
 import type { Product } from '@/types';
 
 const ManageProducts = () => {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -56,11 +57,16 @@ const ManageProducts = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleDelete = async (slug: string) => {
-    // Optimistic delete or calling backend would go here if we set up delete route
-    // API mock - normally we'd do a delete method
-    console.log("Delete product via API", slug);
-    refetch();
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this product?')) return;
+    try {
+      await productService.deleteProduct(id);
+      // Invalidate both admin list and public product list
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete product.');
+    }
   };
 
   const resetForm = () => {
@@ -90,32 +96,48 @@ const ManageProducts = () => {
   };
 
   const handleSave = async () => {
-    // Validation
     if (!formName.trim()) { setFormError('Product name is required'); return; }
     if (!formPrice || parseFloat(formPrice) <= 0) { setFormError('Valid price is required'); return; }
     if (!formStock || parseInt(formStock) < 0) { setFormError('Valid stock quantity is required'); return; }
+    if (!formCategory) { setFormError('Please select a category'); return; }
     setFormError('');
 
-    const productPayload = {
-      title: formName.trim(),
-      description: formDescription.trim() || 'No description provided.',
-      price: parseFloat(formPrice),
-      originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
-      stock: parseInt(formStock),
-      categoryId: categories.find((c: any) => c.name === formCategory)?.id || '',
-    };
+    // Placeholder image used when no image is uploaded
+    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop';
 
-    if (editingProduct) {
-      // Update via API
-       console.log('Update product in API:', editingProduct.slug, productPayload);
-    } else {
-      // Create via API
-       console.log('Create product in API:', productPayload);
+    const categoryId = categories.find((c: any) => c.name === formCategory)?.id || '';
+
+    try {
+      if (editingProduct) {
+        await productService.updateProduct(editingProduct.id, {
+          title: formName.trim(),
+          description: formDescription.trim() || 'No description provided.',
+          price: parseFloat(formPrice),
+          originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
+          stock: parseInt(formStock),
+          categoryId,
+        });
+      } else {
+        const slug = slugify(formName.trim()) + '-' + Date.now();
+        await productService.createProduct({
+          title: formName.trim(),
+          slug,
+          description: formDescription.trim() || 'No description provided.',
+          price: parseFloat(formPrice),
+          originalPrice: formOriginalPrice ? parseFloat(formOriginalPrice) : undefined,
+          stock: parseInt(formStock),
+          categoryId,
+          images: [DEFAULT_IMAGE],
+          tags: [],
+        });
+      }
+      // Invalidate both admin list and public product list so changes appear in real-time
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      closeDrawer();
+    } catch (err: any) {
+      setFormError(err?.response?.data?.message || 'Failed to save product. Please try again.');
     }
-    
-    // Refresh list from DB
-    await refetch();
-    closeDrawer();
   };
 
   // Initial page entrance
